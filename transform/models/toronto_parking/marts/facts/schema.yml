@@ -1,0 +1,76 @@
+version: 2
+
+models:
+  - name: fct_parking_tickets
+    description: >
+      Fact table for parking tickets. One row per ticket.
+      Grain: tag_number_masked + infraction_date.
+      Incremental — rebuilt from max(infraction_date) on each run to handle late arrivals.
+      Full refresh: dbt run --full-refresh to rebuild from scratch.
+    columns:
+      - name: ticket_id
+        description: "Surrogate primary key (MD5 of tag_number_masked + infraction_date)."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: tag_number_masked
+        description: "Partially masked ticket number."
+        data_tests:
+          - not_null
+
+      - name: infraction_date
+        description: "Date the infraction was issued."
+        data_tests:
+          - not_null
+
+      - name: infraction_code
+        description: "Numeric infraction type code."
+
+      - name: infraction_description
+        description: "Text description of the infraction."
+
+      - name: set_fine_amount
+        description: "Prescribed fine amount in CAD."
+
+      - name: time_of_infraction
+        description: "Zero-padded HHMM string."
+
+      - name: location1
+        description: "Primary street or lot."
+
+      - name: location2
+        description: "Cross-street or direction."
+
+      - name: province
+        description: "Vehicle registration province."
+
+      - name: infraction_year
+        description: "Calendar year."
+
+      - name: infraction_month
+        description: "Calendar month (1–12)."
+
+      - name: infraction_day
+        description: "Calendar day (1–31)."
+
+      - name: day_of_week_num
+        description: "Day of week integer (0=Sunday, 6=Saturday)."
+
+      - name: day_of_week_name
+        description: "Day of week name."
+
+      - name: iso_week
+        description: "ISO week number (1–53)."
+
+      - name: infraction_quarter
+        description: "Calendar quarter (1–4)."
+
+      - name: infraction_hour
+        description: "Hour of infraction (0–23). Null when time is unknown."
+
+      - name: time_of_day_bucket
+        description: "Morning / Afternoon / Evening / Night."
+
+      - name: is_weekend
+        description: "True when infraction falls on Saturday or Sunday."

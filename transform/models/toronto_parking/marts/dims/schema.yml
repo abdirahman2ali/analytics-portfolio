@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: dim_infraction_codes
+    description: >
+      Dimension for infraction types. One row per unique infraction_code.
+      Grain: infraction_code.
+      Description and fine amount reflect the most common combination seen in ticket data.
+    columns:
+      - name: infraction_code_id
+        description: "Surrogate primary key."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: infraction_code
+        description: "Numeric infraction code. Natural key."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: infraction_description
+        description: "Most common description for this code."
+
+      - name: standard_fine_amount
+        description: "Most common fine amount for this code in CAD."
+
+      - name: total_tickets
+        description: "Lifetime ticket count for this infraction code."
+
+      - name: first_seen_date
+        description: "Earliest date this infraction code appears in the dataset."
+
+      - name: last_seen_date
+        description: "Most recent date this infraction code appears in the dataset."
+
+  - name: dim_locations
+    description: >
+      Dimension for parking infraction locations. One row per unique location1 + location2 combination.
+      Grain: location1 + location2.
+    columns:
+      - name: location_key
+        description: "Surrogate primary key."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: location1
+        description: "Primary street or lot. Not null."
+        data_tests:
+          - not_null
+
+      - name: location2
+        description: "Cross-street or direction qualifier. Nullable."
+
+      - name: location_display
+        description: "Human-readable combined location string."
+
+      - name: latitude
+        description: "Street centroid latitude (WGS 84). Null when the street could not be geocoded."
+
+      - name: longitude
+        description: "Street centroid longitude (WGS 84). Null when the street could not be geocoded."
+
+      - name: ticket_count
+        description: "All-time ticket count for this location."
+
+      - name: current_year
+        description: "The year that current_year_count corresponds to. Used to correctly compute the delta on mid-year re-runs."
+
+      - name: current_year_count
+        description: "Ticket count for current_year only. Subtracted from ticket_count before adding the new year's count on each incremental run."

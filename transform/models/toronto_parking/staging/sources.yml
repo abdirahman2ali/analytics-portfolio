@@ -1,0 +1,50 @@
+version: 2
+
+sources:
+  - name: toronto
+    description: "Raw Toronto Open Data loaded by the ingestion pipeline."
+    database: abdirahman_portfolio
+    schema: toronto_parking_raw
+    tables:
+      - name: parking_tickets_raw
+        description: >
+          Raw parking ticket records loaded from Toronto Open Data CKAN API.
+          Partitioned by date_of_infraction (yearly range partitions).
+          One row per ticket issuance event.
+        columns:
+          - name: tag_number_masked
+            description: "Partially masked ticket number — uniquely identifies a ticket when combined with date_of_infraction."
+          - name: date_of_infraction
+            description: "Date the infraction was issued. Partition key."
+          - name: infraction_code
+            description: "Numeric code identifying the type of infraction."
+          - name: infraction_description
+            description: "Human-readable description of the infraction."
+          - name: set_fine_amount
+            description: "Prescribed fine amount in CAD at time of issuance."
+          - name: time_of_infraction
+            description: "Time of infraction as a zero-padded 4-character string (HHMM)."
+          - name: location1
+            description: "Primary street or lot location."
+          - name: location2
+            description: "Cross-street or direction qualifier."
+          - name: officer_tag_number
+            description: "Partially masked officer identifier."
+          - name: province
+            description: "Province of the offending vehicle's registration."
+          - name: loaded_at
+            description: "Timestamp when this row was loaded by the ingestion pipeline."
+
+      - name: street_centrelines
+        description: >
+          Street name geocodes derived from the Toronto Centreline (TCL) dataset.
+          One row per unique street name. Loaded by ingestion/fetch_centrelines.py.
+        columns:
+          - name: lname
+            description: "Street name in uppercase abbreviated format. Matches location1 in parking_tickets_raw."
+          - name: latitude
+            description: "Average centroid latitude (WGS 84) across all segments for this street."
+          - name: longitude
+            description: "Average centroid longitude (WGS 84) across all segments for this street."
+          - name: loaded_at
+            description: "Timestamp when this row was loaded."

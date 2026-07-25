@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: int_tickets_enriched
+    description: >
+      Enriched parking tickets with derived date and time dimensions.
+      Adds infraction_year, infraction_month, day_of_week, infraction_hour,
+      time_of_day_bucket, and is_weekend. One row per ticket.
+    columns:
+      - name: tag_number_masked
+        description: "Partially masked ticket number."
+        data_tests:
+          - not_null
+
+      - name: infraction_date
+        description: "Date the infraction was issued."
+        data_tests:
+          - not_null
+
+      - name: infraction_year
+        description: "Calendar year extracted from infraction_date."
+
+      - name: infraction_month
+        description: "Calendar month (1–12) extracted from infraction_date."
+
+      - name: day_of_week_num
+        description: "Day of week as integer (0=Sunday, 6=Saturday)."
+
+      - name: day_of_week_name
+        description: "Day of week as text (e.g. 'Monday')."
+
+      - name: infraction_hour
+        description: "Hour of infraction (0–23). Null when time_of_infraction is malformed."
+
+      - name: time_of_day_bucket
+        description: "Morning (6–11), Afternoon (12–17), Evening (18–22), Night (23–5). Null when hour is unknown."
+
+      - name: is_weekend
+        description: "True when infraction_date falls on Saturday or Sunday."

@@ -1,9 +1,9 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
 import pytest
 
 from nba_ingestion.scraper import get_season_stats
-
 
 SAMPLE_HTML = """
 <html><body>

@@ -2,12 +2,13 @@ import os
 import time
 from datetime import date
 from pathlib import Path
+
 import pandas as pd
 from dotenv import load_dotenv
 
+from nba_ingestion.loader import ensure_schema, ensure_table, get_last_loaded_year, get_loaded_seasons, write_to_db
 from nba_ingestion.scraper import get_season_stats
 from nba_ingestion.transformer import prepare_for_db, season_label
-from nba_ingestion.loader import ensure_schema, ensure_table, write_to_db, get_last_loaded_year, get_loaded_seasons
 
 if not os.getenv("DATABRICKS_RUNTIME_VERSION"):
     load_dotenv(Path(__file__).parent.parent.parent.parent / ".claude" / ".env")
@@ -41,7 +42,11 @@ def fetch_with_retry(year: int) -> pd.DataFrame:
             return get_season_stats(year)
         except Exception as e:
             if "429" in str(e) and attempt < MAX_RETRIES:
-                print(f"rate limited — waiting {RETRY_DELAY}s (attempt {attempt}/{MAX_RETRIES})... ", end="", flush=True)
+                print(
+                    f"rate limited — waiting {RETRY_DELAY}s (attempt {attempt}/{MAX_RETRIES})... ",
+                    end="",
+                    flush=True,
+                )
                 time.sleep(RETRY_DELAY)
             else:
                 raise

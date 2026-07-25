@@ -1,17 +1,9 @@
-
-# Name your project! Project names should contain only lowercase characters
-# and underscores. A good package name should reflect your organization's
-# name or the intended use of these models
-name: 'nba_dbt'
-version: '1.0.0'
+name: portfolio_dbt
+version: "1.0.0"
 config-version: 2
 
-# This setting configures which "profile" dbt uses for this project.
-profile: 'nba_dbt'
+profile: portfolio_dbt
 
-# These configurations specify where dbt should look for different types of files.
-# The `model-paths` config, for example, states that models in this project can be
-# found in the "models/" directory. You probably won't need to change these!
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -19,28 +11,45 @@ seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets:
   - "target"
   - "dbt_packages"
 
-# Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
-
 models:
-  nba_dbt:
-    # Config indicated by + and applies to all files under models/example/
-    staging:
-      +materialized: view
-    intermediate:
-      +materialized: view
-    marts:
-      +materialized: table
+  portfolio_dbt:
+    nba:
+      staging:
+        +materialized: view
+        +schema: nba_dbt
+      intermediate:
+        +materialized: view
+        +schema: nba_dbt
+      marts:
+        +materialized: table
+        +schema: nba_dbt
+    toronto_parking:
+      staging:
+        +materialized: view
+        +schema: toronto_parking_dbt_staging
+      intermediate:
+        +materialized: view
+        +schema: toronto_parking_dbt_intermediate
+      marts:
+        facts:
+          +materialized: incremental
+          +schema: toronto_parking_dbt_marts
+        dims:
+          +materialized: table
+          +schema: toronto_parking_dbt_marts
+        reporting:
+          +materialized: table
+          +schema: toronto_parking_dbt_marts
 
 seeds:
-  nba_dbt:
+  portfolio_dbt:
     +schema: seeds
 
 snapshots:
-  nba_dbt:
+  portfolio_dbt:
     +schema: snapshots
 

@@ -1,4 +1,5 @@
 import io
+
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -21,7 +22,10 @@ def get_season_stats(season_end_year: int) -> pd.DataFrame:
     url = f"https://www.basketball-reference.com/leagues/NBA_{season_end_year}_{stat_type}.html"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
         "Accept-Language": "en-US,en;q=0.9",
     }
     response = requests.get(url, headers=headers, timeout=10)

@@ -1,0 +1,103 @@
+version: 2
+
+models:
+  - name: rpt_tickets_monthly
+    description: >
+      Monthly rollup of parking ticket activity. Pre-aggregated for BI and dashboards.
+      Grain: one row per year + month.
+    columns:
+      - name: year
+        description: "Calendar year."
+        data_tests:
+          - not_null
+
+      - name: month
+        description: "Calendar month (1–12)."
+        data_tests:
+          - not_null
+
+      - name: year_month
+        description: "YYYY-MM string for display (e.g. '2024-03')."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: ticket_count
+        description: "Total tickets issued in the month."
+
+      - name: total_fines_cad
+        description: "Sum of all set_fine_amount values for the month."
+
+      - name: avg_fine_cad
+        description: "Average fine amount for the month."
+
+      - name: unique_infraction_codes
+        description: "Count of distinct infraction codes seen in the month."
+
+      - name: unique_streets
+        description: "Count of distinct location1 values in the month."
+
+      - name: weekend_ticket_count
+        description: "Tickets issued on Saturday or Sunday."
+
+      - name: morning_ticket_count
+        description: "Tickets issued 6 AM – 11 AM."
+
+      - name: afternoon_ticket_count
+        description: "Tickets issued 12 PM – 5 PM."
+
+      - name: evening_ticket_count
+        description: "Tickets issued 6 PM – 10 PM."
+
+      - name: night_ticket_count
+        description: "Tickets issued 11 PM – 5 AM."
+
+      - name: top_infraction_code
+        description: "Most frequently issued infraction code in the month."
+
+  - name: rpt_top_streets
+    description: >
+      Top 100 streets by total ticket volume, aggregated across all qualifier
+      variants (NAN, NR, AT, E/S, etc.) that share the same street address.
+      Grain: one row per unique street address (location2).
+    columns:
+      - name: street_address
+        description: "Street address from the raw location2 field (e.g. '2075 BAYVIEW AVE')."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: ticket_count
+        description: "Total tickets issued at this street address across all years."
+        data_tests:
+          - not_null
+
+  - name: rpt_geo_heatmap
+    description: >
+      Street-level geographic rollup for map heatmap visualizations.
+      Coordinates are Toronto Centreline (TCL) centroids averaged across all
+      road segments sharing the same street name. Street name is derived from
+      location2 in the raw ticket data by stripping any leading house number.
+      Streets with no centreline match are excluded.
+      Grain: one row per unique street_name.
+    columns:
+      - name: street_name
+        description: "Street name derived from location2 (e.g. 'KING ST E')."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: latitude
+        description: "WGS84 latitude of the street centroid from Toronto Centreline."
+        data_tests:
+          - not_null
+
+      - name: longitude
+        description: "WGS84 longitude of the street centroid from Toronto Centreline."
+        data_tests:
+          - not_null
+
+      - name: total_tickets
+        description: "Total parking tickets issued on this street across all years."
+        data_tests:
+          - not_null

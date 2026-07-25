@@ -16,7 +16,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: ingestion
+        working-directory: ingestion/nba
 
     steps:
       - uses: actions/checkout@v4
