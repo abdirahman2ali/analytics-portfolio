@@ -1,6 +1,10 @@
 import pandas as pd
 
-from nba_ingestion.transformer import add_season_column, clean_column_names, prepare_for_db
+from nba_ingestion.transformer import (
+    add_season_column,
+    clean_column_names,
+    prepare_for_db,
+)
 
 
 def make_df():
