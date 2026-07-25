@@ -1,41 +1,28 @@
-# nba-analytics
+# analytics-portfolio
 
-End-to-end NBA analytics pipeline: scraping, transformation, and dashboard. Data flows from Basketball Reference (1950–present) through a Postgres warehouse and dbt transformation layer into a static dashboard.
+Personal data engineering portfolio. End-to-end pipelines across multiple domains — ingestion, transformation via dbt, and BI via Omni. All projects run on Databricks (`abdirahman_portfolio` catalog) with a shared dbt project.
 
-## Components
+## Projects
 
-| Directory | What it does |
-|-----------|--------------|
-| [`ingestion/`](ingestion/) | Python scraper — Basketball Reference → Postgres (`nba.player_season_averages`) |
-| [`transform/`](transform/) | dbt pipeline — staging → intermediate → marts with advanced metrics |
-| [`dashboard/`](dashboard/) | Static HTML dashboard generated from mart data, deployed to GitHub Pages |
+### NBA Analytics
+Python scraper pulls player season data from Basketball Reference (1950–present) into Databricks. dbt models produce advanced metrics (TS%, PER-36, usage rate, fantasy scoring) across staging → intermediate → mart layers.
 
-## Architecture
+Stack: Python, BeautifulSoup, Databricks, dbt, Omni
+
+### Toronto Parking Analytics
+Ingests 34.7M+ Toronto Open Data parking tickets (2006–present) via the CKAN API into Delta tables. dbt models build a dimensional model for infraction pattern analysis, street-level enforcement trends, and fine revenue by violation type. Includes geospatial centreline data for map-based queries.
+
+Stack: Python, Databricks, dbt, Omni
+
+## Structure
 
 ```
-Basketball Reference
-        ↓
-  ingestion/          (Python + SQLAlchemy + BeautifulSoup)
-        ↓
-  Postgres (Neon)     nba.player_season_averages
-        ↓
-  transform/          (dbt: staging → int → fct/dim)
-        ↓
-  dashboard/          (generate.py → index.html → GitHub Pages)
+analytics-portfolio/
+├── ingestion/
+│   ├── nba/            Python scraper (Basketball Reference → Databricks)
+│   └── toronto-parking/  CKAN API ingestion (Toronto Open Data → Databricks)
+└── transform/          Single dbt project covering all domains
+    └── models/
+        ├── nba/
+        └── toronto_parking/
 ```
-
-## Live dashboard
-
-[abdirahman2ali.github.io/nba-dashboard](https://abdirahman2ali.github.io/nba-dashboard)
-
-## CI/CD
-
-- `ingestion/` changes trigger lint + test via `ingestion-ci.yml`
-- `transform/` changes trigger dbt compile + run + test via `transform-ci.yml`
-- `dashboard/` changes trigger a deploy to the GitHub Pages host via `dashboard-deploy.yml`
-- Seasonal data load (ingestion → dbt run) runs every September 1st
-
-## See also
-
-- [ingestion/README.md](ingestion/README.md)
-- [transform/README.md](transform/README.md)

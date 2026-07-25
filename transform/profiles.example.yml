@@ -1,4 +1,4 @@
-nba_dbt:
+portfolio_dbt:
   target: dev
   outputs:
     dev:
@@ -7,5 +7,5 @@ nba_dbt:
       http_path: "{{ env_var('DATABRICKS_HTTP_PATH') }}"
       token: "{{ env_var('DATABRICKS_TOKEN') }}"
       catalog: abdirahman_portfolio
-      schema: nba_dbt
+      schema: portfolio_dbt
       threads: 2
