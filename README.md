@@ -1,28 +1,47 @@
 # analytics-portfolio
 
-Personal data engineering portfolio. End-to-end pipelines across multiple domains — ingestion, transformation via dbt, and BI via Omni. All projects run on Databricks (`abdirahman_portfolio` catalog) with a shared dbt project.
+Personal data engineering portfolio built as a monorepo. Each project covers a different analytical domain and follows the same end-to-end pattern: a Python ingestion layer that loads raw data into Databricks, a shared dbt project that transforms it into a dimensional model, and Omni for BI and exploration.
 
-## Projects
+## Architecture
 
-### NBA Analytics
-Python scraper pulls player season data from Basketball Reference (1950–present) into Databricks. dbt models produce advanced metrics (TS%, PER-36, usage rate, fantasy scoring) across staging → intermediate → mart layers.
+Every domain in this repo follows the same pipeline shape:
 
-Stack: Python, BeautifulSoup, Databricks, dbt, Omni
+**Ingest** — a Python package fetches data from an external source (API, scraper, or file download) and writes it into Delta tables in the `abdirahman_portfolio` Databricks catalog.
 
-### Toronto Parking Analytics
-Ingests 34.7M+ Toronto Open Data parking tickets (2006–present) via the CKAN API into Delta tables. dbt models build a dimensional model for infraction pattern analysis, street-level enforcement trends, and fine revenue by violation type. Includes geospatial centreline data for map-based queries.
+**Transform** — a single shared dbt project (`transform/`) covers all domains. Models are namespaced by domain under `models/<domain>/` and follow a three-layer pattern:
 
-Stack: Python, Databricks, dbt, Omni
+- **Staging** — one-to-one with the raw source, typed and renamed, no joins
+- **Intermediate** — joins and business logic, not exposed to BI
+- **Marts** — queryable grain tables (`fct_`, `dim_`, `rpt_`) materialized as tables or incremental models
+
+A custom `generate_schema_name` macro isolates each domain into its own schema (`<domain>_dbt_staging`, `<domain>_dbt_marts`, etc.) within the shared catalog, so domains don't collide and Omni can model them independently.
+
+**BI** — Omni connects to the `abdirahman_portfolio` catalog with the dbt integration enabled, pulling column descriptions, primary keys, and relationships directly from `schema.yml`.
 
 ## Structure
 
 ```
 analytics-portfolio/
 ├── ingestion/
-│   ├── nba/            Python scraper (Basketball Reference → Databricks)
-│   └── toronto-parking/  CKAN API ingestion (Toronto Open Data → Databricks)
-└── transform/          Single dbt project covering all domains
+│   └── <domain>/           one Python package per source domain
+│       ├── main.py
+│       ├── <domain>/       ingestion logic (fetcher, transformer, loader)
+│       ├── tests/
+│       └── requirements.txt
+└── transform/              single dbt project covering all domains
+    ├── dbt_project.yml
+    ├── macros/
     └── models/
-        ├── nba/
-        └── toronto_parking/
+        └── <domain>/
+            ├── staging/
+            ├── intermediate/
+            └── marts/
 ```
+
+## Stack
+
+Python, Databricks (Delta Lake, serverless compute), dbt Core, Omni
+
+## CI
+
+Pull requests touching `ingestion/**` run lint (`ruff`) and unit tests (`pytest`) against the affected domain's ingestion package before merge is allowed.
