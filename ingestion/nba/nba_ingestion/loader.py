@@ -136,9 +136,9 @@ def write_to_db(df: pd.DataFrame, table_name: str = "player_season_totals") -> N
             with conn.cursor() as cur:
                 chunk_size = 500
                 records = df.where(pd.notnull(df), None).values.tolist()
-                int_cols = {col: cols.index(col) for col in ("trp_dbl",) if col in cols}
+                int_cols = [cols.index(col) for col in ("trp_dbl",) if col in cols]
                 for rec in records:
-                    for col, idx in int_cols.items():
+                    for idx in int_cols:
                         if rec[idx] is not None:
                             rec[idx] = int(rec[idx])
                 for i in range(0, len(records), chunk_size):
