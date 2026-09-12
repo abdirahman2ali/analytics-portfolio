@@ -1,4 +1,3 @@
-
 # dbt
 target/
 dbt_packages/
@@ -28,6 +27,3 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
-
-# Profiles (if accidentally committed)
-profiles.yml

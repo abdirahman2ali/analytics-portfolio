@@ -1,0 +1,36 @@
+name: nba_dbt
+version: "1.0.0"
+config-version: 2
+
+profile: nba_dbt
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  nba_dbt:
+    staging:
+      +materialized: view
+      +schema: nba_dbt
+    intermediate:
+      +materialized: view
+      +schema: nba_dbt
+    marts:
+      +materialized: table
+      +schema: nba_dbt
+
+seeds:
+  nba_dbt:
+    +schema: seeds
+
+snapshots:
+  nba_dbt:
+    +schema: snapshots
