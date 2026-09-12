@@ -1,12 +1,3 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='filing_id',
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
-
 select
     {{ dbt_utils.generate_surrogate_key(['cik', 'concept', 'period_of_report', 'filing_type']) }} as filing_id,
     ticker,
@@ -32,7 +23,3 @@ where concept in (
     'long_term_debt',
     'short_term_debt'
 )
-
-{% if is_incremental() %}
-    and ingested_at > (select max(ingested_at) from {{ this }})
-{% endif %}

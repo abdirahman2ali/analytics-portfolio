@@ -1,12 +1,3 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='filing_id',
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
-
 select
     {{ dbt_utils.generate_surrogate_key(['cik', 'xbrl_concept', 'period_of_report', 'filing_type', 'filed_date']) }} as filing_id,
     ticker,
@@ -24,7 +15,3 @@ select
     ingested_at
 
 from {{ source('edgar_raw', 'edgar_raw_facts') }}
-
-{% if is_incremental() %}
-    where ingested_at > (select max(ingested_at) from {{ this }})
-{% endif %}
