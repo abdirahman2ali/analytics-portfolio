@@ -26,7 +26,7 @@ CONCEPT_MAP: dict[str, str] = {
     "EarningsPerShareBasic": "eps_basic",
 }
 
-_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/{cik}.json"
+_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 _MAX_REQUESTS_PER_SECOND = 10
 _MIN_INTERVAL = 1.0 / _MAX_REQUESTS_PER_SECOND
 
