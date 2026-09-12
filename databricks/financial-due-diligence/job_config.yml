@@ -9,7 +9,7 @@ tasks:
   - task_key: edgar_ingestion
     description: "Fetch S&P 500 XBRL facts from SEC EDGAR and write to Databricks Delta."
     python_script_task:
-      python_file: financial-due-diligence/ingestion/edgar_ingestion.py
+      python_file: ingestion/financial-due-diligence/edgar_ingestion.py
     new_cluster:
       spark_version: "15.4.x-scala2.12"
       node_type_id: i3.xlarge
@@ -35,7 +35,7 @@ tasks:
     depends_on:
       - task_key: edgar_ingestion
     dbt_task:
-      project_directory: financial-due-diligence/dbt
+      project_directory: transform/financial-due-diligence
       commands:
         - "dbt deps"
         - "dbt build --select bronze+ --fail-fast"

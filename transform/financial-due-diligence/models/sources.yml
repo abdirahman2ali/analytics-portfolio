@@ -4,7 +4,7 @@ sources:
   - name: edgar_raw
     description: "Raw SEC EDGAR XBRL facts ingested by edgar_ingestion.py into Databricks Delta."
     database: "{{ target.database }}"
-    schema: "{{ env_var('DATABRICKS_SCHEMA_BRONZE', 'bronze') }}"
+    schema: "financial_due_diligence_bronze"
     loaded_at_field: ingested_at
     freshness:
       warn_after: {count: 3, period: day}

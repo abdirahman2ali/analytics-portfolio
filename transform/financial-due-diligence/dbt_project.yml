@@ -20,16 +20,16 @@ models:
 
     bronze:
       +materialized: incremental
-      +schema: "{{ env_var('DATABRICKS_SCHEMA_BRONZE', 'bronze') }}"
+      +schema: "financial_due_diligence_bronze"
 
     silver:
       +materialized: incremental
-      +schema: "{{ env_var('DATABRICKS_SCHEMA_SILVER', 'silver') }}"
+      +schema: "financial_due_diligence_silver"
 
     gold:
       +materialized: incremental
-      +schema: "{{ env_var('DATABRICKS_SCHEMA_GOLD', 'gold') }}"
+      +schema: "financial_due_diligence_gold"
 
 seeds:
   financial_due_diligence:
-    +schema: "{{ env_var('DATABRICKS_SCHEMA_BRONZE', 'bronze') }}"
+    +schema: "financial_due_diligence_bronze"

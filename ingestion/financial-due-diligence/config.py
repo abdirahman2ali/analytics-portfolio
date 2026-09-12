@@ -59,8 +59,8 @@ class Settings:
             databricks_http_path=required["DATABRICKS_HTTP_PATH"],  # type: ignore[arg-type]
             databricks_token=_secret_or_env("databricks_token", "DATABRICKS_TOKEN"),
             databricks_catalog=required["DATABRICKS_CATALOG"],  # type: ignore[arg-type]
-            databricks_schema_bronze=_secret_or_env("databricks_schema_bronze", "DATABRICKS_SCHEMA_BRONZE") or "bronze",
-            databricks_schema_silver=_secret_or_env("databricks_schema_silver", "DATABRICKS_SCHEMA_SILVER") or "silver",
-            databricks_schema_gold=_secret_or_env("databricks_schema_gold", "DATABRICKS_SCHEMA_GOLD") or "gold",
+            databricks_schema_bronze=_secret_or_env("databricks_schema_bronze", "DATABRICKS_SCHEMA_BRONZE") or "financial_due_diligence_bronze",
+            databricks_schema_silver=_secret_or_env("databricks_schema_silver", "DATABRICKS_SCHEMA_SILVER") or "financial_due_diligence_silver",
+            databricks_schema_gold=_secret_or_env("databricks_schema_gold", "DATABRICKS_SCHEMA_GOLD") or "financial_due_diligence_gold",
             edgar_user_agent=required["EDGAR_USER_AGENT"],  # type: ignore[arg-type]
         )
