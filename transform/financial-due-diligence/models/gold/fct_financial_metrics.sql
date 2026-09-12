@@ -115,8 +115,7 @@ metrics as (
         -- leverage & coverage
         (coalesce(long_term_debt, 0) + coalesce(short_term_debt, 0)) / nullif(ebit, 0) as debt_to_ebitda,
         total_assets / nullif(total_liabilities, 0) as current_ratio,
-        -- interest_expense not available in source; populated when added to int_financials_combined
-        null as interest_coverage,
+        ebit / nullif(interest_expense, 0) as interest_coverage,
 
         -- consistency: coefficient of variation (lower = more consistent)
         revenue_trailing_8q_stddev / nullif(revenue_trailing_8q_avg, 0) as revenue_consistency,

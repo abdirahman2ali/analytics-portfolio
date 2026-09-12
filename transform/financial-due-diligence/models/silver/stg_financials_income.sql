@@ -37,6 +37,7 @@ pivoted as (
         cast(max(case when concept = 'ebit' then value end) as decimal(20, 4)) as ebit,
         cast(max(case when concept = 'net_income' then value end) as decimal(20, 4)) as net_income,
         cast(max(case when concept = 'eps_basic' then value end) as decimal(20, 4)) as eps_basic,
+        cast(max(case when concept = 'interest_expense' then value end) as decimal(20, 4)) as interest_expense,
 
         max(ingested_at) as ingested_at
 

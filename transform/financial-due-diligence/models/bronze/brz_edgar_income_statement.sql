@@ -25,7 +25,7 @@ select
 
 from {{ source('edgar_raw', 'edgar_raw_facts') }}
 
-where concept in ('revenue', 'gross_profit', 'ebit', 'net_income', 'eps_basic')
+where concept in ('revenue', 'gross_profit', 'ebit', 'net_income', 'eps_basic', 'interest_expense')
 
 {% if is_incremental() %}
     and ingested_at > (select max(ingested_at) from {{ this }})

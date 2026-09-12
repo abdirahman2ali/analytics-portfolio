@@ -65,6 +65,7 @@ joined as (
         i.ebit,
         i.net_income,
         i.eps_basic,
+        i.interest_expense,
 
         -- balance sheet
         b.total_assets,
