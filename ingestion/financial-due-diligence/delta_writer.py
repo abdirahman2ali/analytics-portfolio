@@ -85,19 +85,22 @@ class DeltaWriter:
             )
 
     def ensure_tables_exist(self) -> None:
-        """Create raw facts and checkpoint Delta tables if they do not already exist."""
+        """Create bronze schema and Delta tables if they do not already exist."""
         cat = self._settings.databricks_catalog
         sch = self._settings.databricks_schema_bronze
+        schema_ddl = f"CREATE SCHEMA IF NOT EXISTS {cat}.{sch}"
         raw_ddl = _CREATE_RAW_FACTS_DDL.format(catalog=cat, schema=sch, table=_RAW_FACTS_TABLE)
         chk_ddl = _CREATE_CHECKPOINT_DDL.format(catalog=cat, schema=sch, table=_CHECKPOINT_TABLE)
         if self._spark:
+            self._spark.sql(schema_ddl)
             self._spark.sql(raw_ddl)
             self._spark.sql(chk_ddl)
         else:
             with self._conn.cursor() as cursor:  # type: ignore[union-attr]
+                cursor.execute(schema_ddl)
                 cursor.execute(raw_ddl)
                 cursor.execute(chk_ddl)
-        logger.info("Delta tables verified/created")
+        logger.info("Delta schema and tables verified/created")
 
     def get_checkpoint(self, cik: str) -> Optional[date]:
         """Return the last successfully ingested filed_date for a given CIK.
