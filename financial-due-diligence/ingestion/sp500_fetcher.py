@@ -67,7 +67,10 @@ def fetch_sp500_tickers(user_agent: str) -> list[CompanyInfo]:
 
 def _fetch_wikipedia_table() -> pd.DataFrame:
     """Pull the first S&P 500 table from Wikipedia."""
-    tables = pd.read_html(_WIKIPEDIA_URL)
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; analytics-portfolio/1.0)"}
+    response = requests.get(_WIKIPEDIA_URL, headers=headers, timeout=30)
+    response.raise_for_status()
+    tables = pd.read_html(response.text)
     df = tables[0]
     logger.info("Fetched %d rows from Wikipedia S&P 500 table", len(df))
     return df
