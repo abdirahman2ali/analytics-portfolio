@@ -1,0 +1,35 @@
+name: financial_due_diligence
+version: "1.0.0"
+config-version: 2
+
+profile: financial_due_diligence
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  financial_due_diligence:
+    +file_format: delta
+    +incremental_strategy: merge
+
+    bronze:
+      +materialized: incremental
+      +schema: "{{ env_var('DATABRICKS_SCHEMA_BRONZE', 'bronze') }}"
+
+    silver:
+      +materialized: incremental
+      +schema: "{{ env_var('DATABRICKS_SCHEMA_SILVER', 'silver') }}"
+
+    gold:
+      +materialized: incremental
+      +schema: "{{ env_var('DATABRICKS_SCHEMA_GOLD', 'gold') }}"
+
+seeds:
+  financial_due_diligence:
+    +schema: "{{ env_var('DATABRICKS_SCHEMA_BRONZE', 'bronze') }}"

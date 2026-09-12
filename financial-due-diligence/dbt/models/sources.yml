@@ -1,0 +1,75 @@
+version: 2
+
+sources:
+  - name: edgar_raw
+    description: "Raw SEC EDGAR XBRL facts ingested by edgar_ingestion.py into Databricks Delta."
+    database: "{{ env_var('DATABRICKS_CATALOG') }}"
+    schema: "{{ env_var('DATABRICKS_SCHEMA_BRONZE', 'bronze') }}"
+    loaded_at_field: ingested_at
+    freshness:
+      warn_after: {count: 3, period: day}
+      error_after: {count: 7, period: day}
+
+    tables:
+      - name: edgar_raw_facts
+        description: "One row per (ticker, CIK, concept, period_of_report, filing_type). All financial XBRL concepts from 10-K and 10-Q filings."
+        columns:
+          - name: ticker
+            description: "Equity ticker symbol."
+            tests:
+              - not_null
+          - name: cik
+            description: "Zero-padded 10-digit SEC CIK identifier."
+            tests:
+              - not_null
+          - name: company_name
+            description: "Company legal name from EDGAR."
+          - name: filing_type
+            description: "SEC form type: 10-K (annual) or 10-Q (quarterly)."
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ["10-K", "10-Q"]
+          - name: period_of_report
+            description: "End date of the reporting period (YYYY-MM-DD)."
+            tests:
+              - not_null
+          - name: filed_date
+            description: "Date the filing was submitted to EDGAR (YYYY-MM-DD)."
+            tests:
+              - not_null
+          - name: fiscal_year
+            description: "Fiscal year derived from period_of_report."
+          - name: fiscal_quarter
+            description: "Fiscal quarter (1-4) for 10-Q filings; null for 10-K."
+          - name: concept
+            description: "Canonical financial concept name (e.g. revenue, ebit, ocf)."
+            tests:
+              - not_null
+          - name: xbrl_concept
+            description: "Original XBRL concept tag from SEC EDGAR (e.g. Revenues, GrossProfit)."
+          - name: value
+            description: "Reported numeric value in USD (or shares for EPS)."
+          - name: unit
+            description: "Unit of measurement: USD or shares."
+          - name: ingested_at
+            description: "UTC timestamp when this record was written by the ingestion script."
+            tests:
+              - not_null
+
+      - name: ingestion_checkpoint
+        description: "Tracks the most recently ingested filed_date per CIK for incremental runs."
+        columns:
+          - name: cik
+            description: "Zero-padded 10-digit SEC CIK."
+            tests:
+              - not_null
+              - unique
+          - name: last_filed_date
+            description: "Most recent filed_date successfully ingested for this CIK."
+            tests:
+              - not_null
+          - name: updated_at
+            description: "Timestamp of the last checkpoint update."
+            tests:
+              - not_null
