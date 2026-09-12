@@ -1,12 +1,3 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='filing_id',
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
-
 select
     {{ dbt_utils.generate_surrogate_key(['cik', 'concept', 'period_of_report', 'filing_type']) }} as filing_id,
     ticker,
@@ -26,7 +17,3 @@ select
 from {{ source('edgar_raw', 'edgar_raw_facts') }}
 
 where concept in ('revenue', 'gross_profit', 'ebit', 'net_income', 'eps_basic', 'interest_expense')
-
-{% if is_incremental() %}
-    and ingested_at > (select max(ingested_at) from {{ this }})
-{% endif %}

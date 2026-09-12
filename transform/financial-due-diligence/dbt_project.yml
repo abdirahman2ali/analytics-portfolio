@@ -15,19 +15,20 @@ clean-targets: ["target", "dbt_packages"]
 
 models:
   financial_due_diligence:
-    +file_format: delta
-    +incremental_strategy: merge
-
     bronze:
-      +materialized: incremental
+      +materialized: view
       +schema: "financial_due_diligence_bronze"
 
     silver:
       +materialized: incremental
+      +file_format: delta
+      +incremental_strategy: merge
       +schema: "financial_due_diligence_silver"
 
     gold:
       +materialized: incremental
+      +file_format: delta
+      +incremental_strategy: merge
       +schema: "financial_due_diligence_gold"
 
 seeds:
