@@ -17,15 +17,12 @@ _SECRETS_SCOPE = "financial_due_diligence"
 def _secret_or_env(secret_key: str, env_var: str) -> Optional[str]:
     """Try Databricks Secrets first (when running on-cluster), then fall back to env var."""
     try:
-        from pyspark.sql import SparkSession
+        from databricks.sdk.runtime import dbutils  # type: ignore[import]
 
-        spark = SparkSession.getActiveSession()
-        if spark is not None:
-            dbutils = spark._jvm.com.databricks.dbutils_v1.DBUtilsHolder.dbutils()  # type: ignore[attr-defined]
-            val = dbutils.secrets().get(_SECRETS_SCOPE, secret_key)
-            if val:
-                logger.debug("Loaded %s from Databricks Secrets", secret_key)
-                return val
+        val = dbutils.secrets.get(scope=_SECRETS_SCOPE, key=secret_key)
+        if val:
+            logger.debug("Loaded %s from Databricks Secrets", secret_key)
+            return val
     except Exception:
         pass
     return os.getenv(env_var)
