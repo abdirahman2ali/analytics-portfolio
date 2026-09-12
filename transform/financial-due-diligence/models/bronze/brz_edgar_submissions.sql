@@ -8,7 +8,7 @@
 }}
 
 select
-    {{ dbt_utils.generate_surrogate_key(['cik', 'xbrl_concept', 'period_of_report', 'filing_type']) }} as filing_id,
+    {{ dbt_utils.generate_surrogate_key(['cik', 'xbrl_concept', 'period_of_report', 'filing_type', 'filed_date']) }} as filing_id,
     ticker,
     cik,
     company_name,
