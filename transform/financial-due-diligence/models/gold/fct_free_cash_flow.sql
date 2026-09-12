@@ -7,7 +7,7 @@
     )
 }}
 
--- Dedicated FCF analysis layer: components, ratios, growth, trends, and CapEx intensity.
+-- FCF components, ratios, growth, trends, and CapEx intensity.
 -- Grain: ticker + period_of_report + filing_type
 
 with base as (
