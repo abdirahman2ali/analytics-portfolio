@@ -1,10 +1,8 @@
 """Writes ingested EDGAR records to Databricks Delta tables."""
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
-
-from databricks import sql
 
 from config import Settings
 
@@ -60,34 +58,45 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
+def _try_get_spark():
+    """Return the active SparkSession when running on-cluster, else None."""
+    try:
+        from pyspark.sql import SparkSession  # type: ignore[import]
+        return SparkSession.builder.getOrCreate()
+    except Exception:
+        return None
+
+
 class DeltaWriter:
     """Manages writes to Databricks Delta tables for the ingestion pipeline."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._connection = sql.connect(
-            server_hostname=settings.databricks_host,
-            http_path=settings.databricks_http_path,
-            access_token=settings.databricks_token,
-        )
+        self._spark = _try_get_spark()
+        if self._spark:
+            logger.debug("On-cluster: using SparkSession for Delta writes")
+            self._conn = None
+        else:
+            from databricks import sql
+            self._conn = sql.connect(
+                server_hostname=settings.databricks_host,
+                http_path=settings.databricks_http_path,
+                access_token=settings.databricks_token,
+            )
 
     def ensure_tables_exist(self) -> None:
         """Create raw facts and checkpoint Delta tables if they do not already exist."""
-        with self._connection.cursor() as cursor:
-            cursor.execute(
-                _CREATE_RAW_FACTS_DDL.format(
-                    catalog=self._settings.databricks_catalog,
-                    schema=self._settings.databricks_schema_bronze,
-                    table=_RAW_FACTS_TABLE,
-                )
-            )
-            cursor.execute(
-                _CREATE_CHECKPOINT_DDL.format(
-                    catalog=self._settings.databricks_catalog,
-                    schema=self._settings.databricks_schema_bronze,
-                    table=_CHECKPOINT_TABLE,
-                )
-            )
+        cat = self._settings.databricks_catalog
+        sch = self._settings.databricks_schema_bronze
+        raw_ddl = _CREATE_RAW_FACTS_DDL.format(catalog=cat, schema=sch, table=_RAW_FACTS_TABLE)
+        chk_ddl = _CREATE_CHECKPOINT_DDL.format(catalog=cat, schema=sch, table=_CHECKPOINT_TABLE)
+        if self._spark:
+            self._spark.sql(raw_ddl)
+            self._spark.sql(chk_ddl)
+        else:
+            with self._conn.cursor() as cursor:  # type: ignore[union-attr]
+                cursor.execute(raw_ddl)
+                cursor.execute(chk_ddl)
         logger.info("Delta tables verified/created")
 
     def get_checkpoint(self, cik: str) -> Optional[date]:
@@ -99,21 +108,24 @@ class DeltaWriter:
         Returns:
             Most recent filed_date ingested, or None if this CIK has never been ingested.
         """
-        sql_stmt = (
-            f"SELECT last_filed_date FROM "
-            f"{self._settings.databricks_catalog}.{self._settings.databricks_schema_bronze}.{_CHECKPOINT_TABLE} "
-            f"WHERE cik = '{cik}'"
+        fqn = (
+            f"{self._settings.databricks_catalog}"
+            f".{self._settings.databricks_schema_bronze}"
+            f".{_CHECKPOINT_TABLE}"
         )
-        with self._connection.cursor() as cursor:
-            cursor.execute(sql_stmt)
-            row = cursor.fetchone()
-
-        if row is None:
-            return None
-
-        from datetime import datetime
-
-        return datetime.strptime(row[0], "%Y-%m-%d").date()
+        sql_stmt = f"SELECT last_filed_date FROM {fqn} WHERE cik = '{cik}'"
+        if self._spark:
+            row = self._spark.sql(sql_stmt).first()
+            if row is None:
+                return None
+            return datetime.strptime(row["last_filed_date"], "%Y-%m-%d").date()
+        else:
+            with self._conn.cursor() as cursor:  # type: ignore[union-attr]
+                cursor.execute(sql_stmt)
+                row = cursor.fetchone()
+            if row is None:
+                return None
+            return datetime.strptime(row[0], "%Y-%m-%d").date()
 
     def upsert_checkpoint(self, cik: str, filed_date: date) -> None:
         """Update (or insert) the ingestion checkpoint for a CIK.
@@ -129,8 +141,11 @@ class DeltaWriter:
             cik=cik,
             filed_date=filed_date.isoformat(),
         )
-        with self._connection.cursor() as cursor:
-            cursor.execute(sql_stmt)
+        if self._spark:
+            self._spark.sql(sql_stmt)
+        else:
+            with self._conn.cursor() as cursor:  # type: ignore[union-attr]
+                cursor.execute(sql_stmt)
         logger.debug("Checkpoint updated for CIK %s → %s", cik, filed_date)
 
     def write_records(self, records: list[dict], table: str = _RAW_FACTS_TABLE) -> None:
@@ -143,35 +158,79 @@ class DeltaWriter:
         if not records:
             return
 
-        sql_stmt = _INSERT_FACTS_SQL.format(
-            catalog=self._settings.databricks_catalog,
-            schema=self._settings.databricks_schema_bronze,
-            table=table,
-        )
-        rows = [
-            (
-                r["ticker"],
-                r["cik"],
-                r["company_name"],
-                r["filing_type"],
-                r["period_of_report"],
-                r["filed_date"],
-                r["fiscal_year"],
-                r["fiscal_quarter"],
-                r["concept"],
-                r["xbrl_concept"],
-                r["value"],
-                r["unit"],
-                r["ingested_at"],
+        cat = self._settings.databricks_catalog
+        sch = self._settings.databricks_schema_bronze
+        fqn = f"{cat}.{sch}.{table}"
+
+        if self._spark:
+            from pyspark.sql.types import (  # type: ignore[import]
+                DoubleType,
+                IntegerType,
+                StringType,
+                StructField,
+                StructType,
             )
-            for r in records
-        ]
+            spark_schema = StructType([
+                StructField("ticker", StringType(), nullable=False),
+                StructField("cik", StringType(), nullable=False),
+                StructField("company_name", StringType(), nullable=True),
+                StructField("filing_type", StringType(), nullable=False),
+                StructField("period_of_report", StringType(), nullable=False),
+                StructField("filed_date", StringType(), nullable=False),
+                StructField("fiscal_year", IntegerType(), nullable=True),
+                StructField("fiscal_quarter", IntegerType(), nullable=True),
+                StructField("concept", StringType(), nullable=False),
+                StructField("xbrl_concept", StringType(), nullable=True),
+                StructField("value", DoubleType(), nullable=True),
+                StructField("unit", StringType(), nullable=True),
+                StructField("ingested_at", StringType(), nullable=False),
+            ])
+            rows = [
+                (
+                    r["ticker"],
+                    r["cik"],
+                    r["company_name"],
+                    r["filing_type"],
+                    r["period_of_report"],
+                    r["filed_date"],
+                    r["fiscal_year"],
+                    r["fiscal_quarter"],
+                    r["concept"],
+                    r["xbrl_concept"],
+                    float(r["value"]) if r["value"] is not None else None,
+                    r["unit"],
+                    r["ingested_at"],
+                )
+                for r in records
+            ]
+            df = self._spark.createDataFrame(rows, spark_schema)
+            df.write.mode("append").saveAsTable(fqn)
+        else:
+            sql_stmt = _INSERT_FACTS_SQL.format(catalog=cat, schema=sch, table=table)
+            rows_sql = [
+                (
+                    r["ticker"],
+                    r["cik"],
+                    r["company_name"],
+                    r["filing_type"],
+                    r["period_of_report"],
+                    r["filed_date"],
+                    r["fiscal_year"],
+                    r["fiscal_quarter"],
+                    r["concept"],
+                    r["xbrl_concept"],
+                    r["value"],
+                    r["unit"],
+                    r["ingested_at"],
+                )
+                for r in records
+            ]
+            with self._conn.cursor() as cursor:  # type: ignore[union-attr]
+                cursor.executemany(sql_stmt, rows_sql)
 
-        with self._connection.cursor() as cursor:
-            cursor.executemany(sql_stmt, rows)
-
-        logger.info("Wrote %d records to %s", len(records), table)
+        logger.info("Wrote %d records to %s", len(records), fqn)
 
     def close(self) -> None:
-        """Close the Databricks connection."""
-        self._connection.close()
+        """Close the Databricks connection (no-op when using SparkSession)."""
+        if self._conn:
+            self._conn.close()

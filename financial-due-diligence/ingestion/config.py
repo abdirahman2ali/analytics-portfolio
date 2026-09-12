@@ -34,7 +34,7 @@ class Settings:
 
     databricks_host: str
     databricks_http_path: str
-    databricks_token: str
+    databricks_token: Optional[str]
     databricks_catalog: str
     databricks_schema_bronze: str
     databricks_schema_silver: str
@@ -45,7 +45,6 @@ class Settings:
     def from_env(cls) -> "Settings":
         """Load settings, raising ValueError for any missing required value."""
         required = {
-            "databricks_token": _secret_or_env("databricks_token", "DATABRICKS_TOKEN"),
             "DATABRICKS_HOST": _secret_or_env("databricks_host", "DATABRICKS_HOST"),
             "DATABRICKS_HTTP_PATH": _secret_or_env("databricks_http_path", "DATABRICKS_HTTP_PATH"),
             "DATABRICKS_CATALOG": _secret_or_env("databricks_catalog", "DATABRICKS_CATALOG"),
@@ -58,7 +57,7 @@ class Settings:
         return cls(
             databricks_host=required["DATABRICKS_HOST"],  # type: ignore[arg-type]
             databricks_http_path=required["DATABRICKS_HTTP_PATH"],  # type: ignore[arg-type]
-            databricks_token=required["databricks_token"],  # type: ignore[arg-type]
+            databricks_token=_secret_or_env("databricks_token", "DATABRICKS_TOKEN"),
             databricks_catalog=required["DATABRICKS_CATALOG"],  # type: ignore[arg-type]
             databricks_schema_bronze=_secret_or_env("databricks_schema_bronze", "DATABRICKS_SCHEMA_BRONZE") or "bronze",
             databricks_schema_silver=_secret_or_env("databricks_schema_silver", "DATABRICKS_SCHEMA_SILVER") or "silver",
