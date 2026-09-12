@@ -79,7 +79,7 @@ ranked as (
             order by revenue_consistency desc nulls last
         ) as revenue_consistency_pct,
 
-        -- peer rank within sector (by composite will be applied in fct_company_scores)
+        -- peer rank within sector (composite peer rank applied in fct_company_scores)
         row_number() over (
             partition by gics_sector, filing_type, period_of_report
             order by gross_margin desc nulls last
@@ -121,16 +121,16 @@ scored as (
         total_equity,
         revenue,
 
-        {{ _score_metric('revenue_growth_yoy_pct') }}   as revenue_growth_yoy_score,
-        {{ _score_metric('revenue_cagr_3yr_pct') }}     as revenue_cagr_3yr_score,
-        {{ _score_metric('gross_margin_pct') }}         as gross_margin_score,
-        {{ _score_metric('ebitda_margin_pct') }}        as ebitda_margin_score,
-        {{ _score_metric('fcf_margin_pct') }}           as fcf_margin_score,
-        {{ _score_metric('fcf_conversion_pct') }}       as fcf_conversion_score,
-        {{ _score_metric('debt_to_ebitda_pct') }}       as debt_to_ebitda_score,
-        {{ _score_metric('current_ratio_pct') }}        as current_ratio_score,
-        {{ _score_metric('interest_coverage_pct') }}    as interest_coverage_score,
-        {{ _score_metric('revenue_consistency_pct') }}  as revenue_consistency_score
+        {{ _score_metric('revenue_growth_yoy_pct') }} as revenue_growth_yoy_score,
+        {{ _score_metric('revenue_cagr_3yr_pct') }} as revenue_cagr_3yr_score,
+        {{ _score_metric('gross_margin_pct') }} as gross_margin_score,
+        {{ _score_metric('ebitda_margin_pct') }} as ebitda_margin_score,
+        {{ _score_metric('fcf_margin_pct') }} as fcf_margin_score,
+        {{ _score_metric('fcf_conversion_pct') }} as fcf_conversion_score,
+        {{ _score_metric('debt_to_ebitda_pct') }} as debt_to_ebitda_score,
+        {{ _score_metric('current_ratio_pct') }} as current_ratio_score,
+        {{ _score_metric('interest_coverage_pct') }} as interest_coverage_score,
+        {{ _score_metric('revenue_consistency_pct') }} as revenue_consistency_score
 
     from ranked
 

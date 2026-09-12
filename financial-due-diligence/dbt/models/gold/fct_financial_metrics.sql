@@ -102,54 +102,51 @@ metrics as (
         fiscal_quarter,
 
         -- growth
-        (revenue - revenue_4q_ago) / nullif(revenue_4q_ago, 0)                as revenue_growth_yoy,
-        power(revenue / nullif(revenue_12q_ago, 0), 1.0 / 3.0) - 1            as revenue_cagr_3yr,
+        (revenue - revenue_4q_ago) / nullif(revenue_4q_ago, 0) as revenue_growth_yoy,
+        power(revenue / nullif(revenue_12q_ago, 0), 1.0 / 3.0) - 1 as revenue_cagr_3yr,
 
         -- margins
-        gross_profit / nullif(revenue, 0)                                      as gross_margin,
-        ebit / nullif(revenue, 0)                                              as ebitda_margin,
-        net_income / nullif(revenue, 0)                                        as net_income_margin,
-        fcf / nullif(revenue, 0)                                               as fcf_margin,
-        fcf / nullif(net_income, 0)                                            as fcf_conversion,
+        gross_profit / nullif(revenue, 0) as gross_margin,
+        ebit / nullif(revenue, 0) as ebitda_margin,
+        net_income / nullif(revenue, 0) as net_income_margin,
+        fcf / nullif(revenue, 0) as fcf_margin,
+        fcf / nullif(net_income, 0) as fcf_conversion,
 
         -- leverage & coverage
-        (coalesce(long_term_debt, 0) + coalesce(short_term_debt, 0))
-            / nullif(ebit, 0)                                                  as debt_to_ebitda,
-        total_assets / nullif(total_liabilities, 0)                            as current_ratio,
-        ebit / nullif(
-            (select null),  -- interest_expense not in combined; placeholder
-            0
-        )                                                                      as interest_coverage,
+        (coalesce(long_term_debt, 0) + coalesce(short_term_debt, 0)) / nullif(ebit, 0) as debt_to_ebitda,
+        total_assets / nullif(total_liabilities, 0) as current_ratio,
+        -- interest_expense not available in source; populated when added to int_financials_combined
+        null as interest_coverage,
 
         -- consistency: coefficient of variation (lower = more consistent)
-        revenue_trailing_8q_stddev / nullif(revenue_trailing_8q_avg, 0)       as revenue_consistency,
+        revenue_trailing_8q_stddev / nullif(revenue_trailing_8q_avg, 0) as revenue_consistency,
 
         -- trend direction (3-quarter slope) for gross_margin
         case
             when gross_profit / nullif(revenue, 0) > gross_margin_1q_ago
-             and gross_margin_1q_ago > gross_margin_2q_ago       then 'improving'
+             and gross_margin_1q_ago > gross_margin_2q_ago then 'improving'
             when gross_profit / nullif(revenue, 0) < gross_margin_1q_ago
-             and gross_margin_1q_ago < gross_margin_2q_ago       then 'declining'
+             and gross_margin_1q_ago < gross_margin_2q_ago then 'declining'
             else 'stable'
-        end                                                                    as gross_margin_trend,
+        end as gross_margin_trend,
 
         -- trend direction for ebitda_margin
         case
             when ebit / nullif(revenue, 0) > ebitda_margin_1q_ago
-             and ebitda_margin_1q_ago > ebitda_margin_2q_ago     then 'improving'
+             and ebitda_margin_1q_ago > ebitda_margin_2q_ago then 'improving'
             when ebit / nullif(revenue, 0) < ebitda_margin_1q_ago
-             and ebitda_margin_1q_ago < ebitda_margin_2q_ago     then 'declining'
+             and ebitda_margin_1q_ago < ebitda_margin_2q_ago then 'declining'
             else 'stable'
-        end                                                                    as ebitda_margin_trend,
+        end as ebitda_margin_trend,
 
         -- trend direction for revenue_growth
         case
             when (revenue - revenue_4q_ago) / nullif(revenue_4q_ago, 0) > rev_growth_1q_ago
-             and rev_growth_1q_ago > rev_growth_2q_ago           then 'improving'
+             and rev_growth_1q_ago > rev_growth_2q_ago then 'improving'
             when (revenue - revenue_4q_ago) / nullif(revenue_4q_ago, 0) < rev_growth_1q_ago
-             and rev_growth_1q_ago < rev_growth_2q_ago           then 'declining'
+             and rev_growth_1q_ago < rev_growth_2q_ago then 'declining'
             else 'stable'
-        end                                                                    as revenue_growth_trend,
+        end as revenue_growth_trend,
 
         -- raw values carried forward for downstream scoring
         fcf,

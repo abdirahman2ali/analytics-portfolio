@@ -8,7 +8,6 @@
 }}
 
 -- Pivots cash flow concept rows into columns and derives FCF.
--- One row per (ticker, period_of_report, filing_type).
 -- Grain: ticker + period_of_report + filing_type
 
 with source as (
@@ -33,7 +32,7 @@ pivoted as (
         fiscal_year,
         fiscal_quarter,
 
-        cast(max(case when concept = 'ocf'   then value end) as decimal(20, 4)) as ocf,
+        cast(max(case when concept = 'ocf' then value end) as decimal(20, 4)) as ocf,
         cast(max(case when concept = 'capex' then value end) as decimal(20, 4)) as capex,
 
         max(ingested_at) as ingested_at

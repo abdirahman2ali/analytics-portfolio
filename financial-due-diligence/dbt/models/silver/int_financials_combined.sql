@@ -50,7 +50,7 @@ joined as (
     select
         i.ticker,
         i.cik,
-        coalesce(i.company_name, c.ticker)  as company_name,
+        coalesce(i.company_name, c.ticker) as company_name,
         c.gics_sector,
         c.gics_sub_industry,
         i.filing_type,

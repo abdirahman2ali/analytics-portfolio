@@ -65,14 +65,14 @@ composite as (
 
         round(
             coalesce(revenue_growth_yoy_score, 0) * 0.15
-            + coalesce(revenue_cagr_3yr_score, 0)   * 0.10
-            + coalesce(gross_margin_score, 0)        * 0.15
-            + coalesce(ebitda_margin_score, 0)       * 0.15
-            + coalesce(fcf_margin_score, 0)          * 0.10
-            + coalesce(fcf_conversion_score, 0)      * 0.10
-            + coalesce(debt_to_ebitda_score, 0)      * 0.10
-            + coalesce(current_ratio_score, 0)       * 0.05
-            + coalesce(interest_coverage_score, 0)   * 0.05
+            + coalesce(revenue_cagr_3yr_score, 0) * 0.10
+            + coalesce(gross_margin_score, 0) * 0.15
+            + coalesce(ebitda_margin_score, 0) * 0.15
+            + coalesce(fcf_margin_score, 0) * 0.10
+            + coalesce(fcf_conversion_score, 0) * 0.10
+            + coalesce(debt_to_ebitda_score, 0) * 0.10
+            + coalesce(current_ratio_score, 0) * 0.05
+            + coalesce(interest_coverage_score, 0) * 0.05
             + coalesce(revenue_consistency_score, 0) * 0.05,
             1
         ) as composite_score
@@ -104,14 +104,14 @@ graded as (
 
         -- build flags array; array_compact removes nulls
         array_compact(array(
-            case when flag_fcf_negative           then '🔴 fcf_negative'           end,
-            case when flag_debt_overload           then '🔴 debt_overload'          end,
-            case when flag_interest_coverage_weak  then '🔴 interest_coverage_weak' end,
-            case when flag_negative_equity         then '🔴 negative_equity'        end,
-            case when flag_margin_compression      then '🟡 margin_compression'     end,
-            case when flag_revenue_deceleration    then '🟡 revenue_deceleration'   end,
-            case when flag_earnings_quality_risk   then '🟡 earnings_quality_risk'  end,
-            case when flag_revenue_inconsistency   then '🟡 revenue_inconsistency'  end
+            case when flag_fcf_negative then '🔴 fcf_negative' end,
+            case when flag_debt_overload then '🔴 debt_overload' end,
+            case when flag_interest_coverage_weak then '🔴 interest_coverage_weak' end,
+            case when flag_negative_equity then '🔴 negative_equity' end,
+            case when flag_margin_compression then '🟡 margin_compression' end,
+            case when flag_revenue_deceleration then '🟡 revenue_deceleration' end,
+            case when flag_earnings_quality_risk then '🟡 earnings_quality_risk' end,
+            case when flag_revenue_inconsistency then '🟡 revenue_inconsistency' end
         )) as flags
 
     from composite
@@ -123,7 +123,7 @@ final as (
     select
         ticker,
         company_name,
-        gics_sector                     as sector,
+        gics_sector as sector,
         period_of_report,
         filing_type,
         composite_score,
