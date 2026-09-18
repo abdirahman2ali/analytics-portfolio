@@ -50,12 +50,62 @@ WHEN NOT MATCHED THEN INSERT (cik, last_filed_date, updated_at)
     VALUES (source.cik, source.last_filed_date, source.updated_at)
 """
 
-_INSERT_FACTS_SQL = """
-INSERT INTO {catalog}.{schema}.{table}
-(ticker, cik, company_name, filing_type, period_of_report, filed_date,
- fiscal_year, fiscal_quarter, concept, xbrl_concept, value, unit, ingested_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+# Merge key: (cik, xbrl_concept, period_of_report, filing_type, filed_date)
+# Keeps the most recently ingested record when duplicates arrive from the EDGAR API.
+_MERGE_FACTS_SQL = """
+MERGE INTO {catalog}.{schema}.{table} AS target
+USING (
+    SELECT
+        ? AS ticker,
+        ? AS cik,
+        ? AS company_name,
+        ? AS filing_type,
+        ? AS period_of_report,
+        ? AS filed_date,
+        ? AS fiscal_year,
+        ? AS fiscal_quarter,
+        ? AS concept,
+        ? AS xbrl_concept,
+        ? AS value,
+        ? AS unit,
+        ? AS ingested_at
+) AS source
+ON  target.cik              = source.cik
+AND target.xbrl_concept     = source.xbrl_concept
+AND target.period_of_report = source.period_of_report
+AND target.filing_type      = source.filing_type
+AND target.filed_date       = source.filed_date
+WHEN MATCHED AND source.ingested_at >= target.ingested_at THEN UPDATE SET
+    ticker          = source.ticker,
+    company_name    = source.company_name,
+    fiscal_year     = source.fiscal_year,
+    fiscal_quarter  = source.fiscal_quarter,
+    concept         = source.concept,
+    xbrl_concept    = source.xbrl_concept,
+    value           = source.value,
+    unit            = source.unit,
+    ingested_at     = source.ingested_at
+WHEN NOT MATCHED THEN INSERT (
+    ticker, cik, company_name, filing_type, period_of_report, filed_date,
+    fiscal_year, fiscal_quarter, concept, xbrl_concept, value, unit, ingested_at
+) VALUES (
+    source.ticker, source.cik, source.company_name, source.filing_type,
+    source.period_of_report, source.filed_date, source.fiscal_year, source.fiscal_quarter,
+    source.concept, source.xbrl_concept, source.value, source.unit, source.ingested_at
+)
 """
+
+_MERGE_KEY = ("cik", "xbrl_concept", "period_of_report", "filing_type", "filed_date")
+
+
+def _dedup_records(records: list[dict]) -> list[dict]:
+    """Deduplicate records by merge key, keeping the most recently ingested row."""
+    seen: dict[tuple, dict] = {}
+    for r in records:
+        key = tuple(r.get(col, "") for col in _MERGE_KEY)
+        if key not in seen or r["ingested_at"] > seen[key]["ingested_at"]:
+            seen[key] = r
+    return list(seen.values())
 
 
 def _try_get_spark():
@@ -152,7 +202,11 @@ class DeltaWriter:
         logger.debug("Checkpoint updated for CIK %s → %s", cik, filed_date)
 
     def write_records(self, records: list[dict], table: str = _RAW_FACTS_TABLE) -> None:
-        """Bulk-insert filing records into a Delta table.
+        """Upsert filing records into a Delta table, deduplicating by merge key.
+
+        Merge key: (cik, xbrl_concept, period_of_report, filing_type, filed_date).
+        When a matching row already exists, it is updated only if the incoming
+        ingested_at is more recent, preventing re-ingestion from creating duplicates.
 
         Args:
             records: List of canonical filing record dicts from EdgarClient.extract_filings.
@@ -161,77 +215,77 @@ class DeltaWriter:
         if not records:
             return
 
+        records = _dedup_records(records)
+
         cat = self._settings.databricks_catalog
         sch = self._settings.databricks_schema_bronze
         fqn = f"{cat}.{sch}.{table}"
 
         if self._spark:
-            from pyspark.sql.types import (  # type: ignore[import]
-                DoubleType,
-                IntegerType,
-                StringType,
-                StructField,
-                StructType,
-            )
-            spark_schema = StructType([
-                StructField("ticker", StringType(), nullable=False),
-                StructField("cik", StringType(), nullable=False),
-                StructField("company_name", StringType(), nullable=True),
-                StructField("filing_type", StringType(), nullable=False),
-                StructField("period_of_report", StringType(), nullable=False),
-                StructField("filed_date", StringType(), nullable=False),
-                StructField("fiscal_year", IntegerType(), nullable=True),
-                StructField("fiscal_quarter", IntegerType(), nullable=True),
-                StructField("concept", StringType(), nullable=False),
-                StructField("xbrl_concept", StringType(), nullable=True),
-                StructField("value", DoubleType(), nullable=True),
-                StructField("unit", StringType(), nullable=True),
-                StructField("ingested_at", StringType(), nullable=False),
-            ])
-            rows = [
-                (
-                    r["ticker"],
-                    r["cik"],
-                    r["company_name"],
-                    r["filing_type"],
-                    r["period_of_report"],
-                    r["filed_date"],
-                    r["fiscal_year"],
-                    r["fiscal_quarter"],
-                    r["concept"],
-                    r["xbrl_concept"],
-                    float(r["value"]) if r["value"] is not None else None,
-                    r["unit"],
-                    r["ingested_at"],
-                )
-                for r in records
-            ]
-            df = self._spark.createDataFrame(rows, spark_schema)
-            df.write.mode("append").saveAsTable(fqn)
+            self._write_records_spark(records, fqn)
         else:
-            sql_stmt = _INSERT_FACTS_SQL.format(catalog=cat, schema=sch, table=table)
-            rows_sql = [
-                (
-                    r["ticker"],
-                    r["cik"],
-                    r["company_name"],
-                    r["filing_type"],
-                    r["period_of_report"],
-                    r["filed_date"],
-                    r["fiscal_year"],
-                    r["fiscal_quarter"],
-                    r["concept"],
-                    r["xbrl_concept"],
-                    r["value"],
-                    r["unit"],
-                    r["ingested_at"],
-                )
-                for r in records
-            ]
-            with self._conn.cursor() as cursor:  # type: ignore[union-attr]
-                cursor.executemany(sql_stmt, rows_sql)
+            self._write_records_jdbc(records, cat, sch, table)
 
-        logger.info("Wrote %d records to %s", len(records), fqn)
+        logger.info("Upserted %d records into %s", len(records), fqn)
+
+    def _write_records_spark(self, records: list[dict], fqn: str) -> None:
+        from pyspark.sql.types import (  # type: ignore[import]
+            DoubleType,
+            IntegerType,
+            StringType,
+            StructField,
+            StructType,
+        )
+        spark_schema = StructType([
+            StructField("ticker", StringType(), nullable=False),
+            StructField("cik", StringType(), nullable=False),
+            StructField("company_name", StringType(), nullable=True),
+            StructField("filing_type", StringType(), nullable=False),
+            StructField("period_of_report", StringType(), nullable=False),
+            StructField("filed_date", StringType(), nullable=False),
+            StructField("fiscal_year", IntegerType(), nullable=True),
+            StructField("fiscal_quarter", IntegerType(), nullable=True),
+            StructField("concept", StringType(), nullable=False),
+            StructField("xbrl_concept", StringType(), nullable=True),
+            StructField("value", DoubleType(), nullable=True),
+            StructField("unit", StringType(), nullable=True),
+            StructField("ingested_at", StringType(), nullable=False),
+        ])
+        rows = [
+            (
+                r["ticker"], r["cik"], r["company_name"], r["filing_type"],
+                r["period_of_report"], r["filed_date"], r["fiscal_year"],
+                r["fiscal_quarter"], r["concept"], r["xbrl_concept"],
+                float(r["value"]) if r["value"] is not None else None,
+                r["unit"], r["ingested_at"],
+            )
+            for r in records
+        ]
+        df = self._spark.createDataFrame(rows, spark_schema)
+        df.createOrReplaceTempView("_source_facts")
+
+        self._spark.sql(f"""
+            MERGE INTO {fqn} AS target
+            USING _source_facts AS source
+            ON  target.cik              = source.cik
+            AND target.xbrl_concept     = source.xbrl_concept
+            AND target.period_of_report = source.period_of_report
+            AND target.filing_type      = source.filing_type
+            AND target.filed_date       = source.filed_date
+            WHEN MATCHED AND source.ingested_at >= target.ingested_at THEN UPDATE SET *
+            WHEN NOT MATCHED THEN INSERT *
+        """)
+
+    def _write_records_jdbc(self, records: list[dict], cat: str, sch: str, table: str) -> None:
+        merge_sql = _MERGE_FACTS_SQL.format(catalog=cat, schema=sch, table=table)
+        with self._conn.cursor() as cursor:  # type: ignore[union-attr]
+            for r in records:
+                cursor.execute(merge_sql, (
+                    r["ticker"], r["cik"], r["company_name"], r["filing_type"],
+                    r["period_of_report"], r["filed_date"], r["fiscal_year"],
+                    r["fiscal_quarter"], r["concept"], r["xbrl_concept"],
+                    r["value"], r["unit"], r["ingested_at"],
+                ))
 
     def close(self) -> None:
         """Close the Databricks connection (no-op when using SparkSession)."""
