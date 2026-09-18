@@ -1,11 +1,4 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key=['ticker', 'period_of_report', 'filing_type'],
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
+{{ config(materialized='table') }}
 
 -- Joins all three normalized staging models into one wide table.
 -- Also joins to the sp500_companies seed to bring in GICS sector.
@@ -15,10 +8,6 @@
 with income as (
 
     select * from {{ ref('stg_financials_income') }}
-
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
 
 ),
 

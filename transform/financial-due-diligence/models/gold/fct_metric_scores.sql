@@ -1,11 +1,4 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key=['ticker', 'period_of_report', 'filing_type'],
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
+{{ config(materialized='table') }}
 
 -- Maps each company's within-sector percentile rank to a 0-100 score per metric.
 -- Score bands: top 10% → 90-100, 10-25% → 75-89, 25-50% → 50-74, 50-75% → 25-49, bottom 25% → 0-24.
@@ -14,10 +7,6 @@
 with metrics as (
 
     select * from {{ ref('fct_financial_metrics') }}
-
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
 
 ),
 

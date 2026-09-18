@@ -1,11 +1,4 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key=['ticker', 'period_of_report', 'filing_type'],
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
+{{ config(materialized='table') }}
 
 -- Pivots cash flow concept rows into columns and derives FCF.
 -- Grain: ticker + period_of_report + filing_type
@@ -13,10 +6,6 @@
 with source as (
 
     select * from {{ ref('brz_edgar_cash_flow') }}
-
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
 
 ),
 

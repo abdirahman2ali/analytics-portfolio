@@ -1,11 +1,4 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key=['ticker', 'period_of_report', 'filing_type'],
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
+{{ config(materialized='table') }}
 
 -- Pivots balance sheet concept rows into columns.
 -- Grain: ticker + period_of_report + filing_type
@@ -13,10 +6,6 @@
 with source as (
 
     select * from {{ ref('brz_edgar_balance_sheet') }}
-
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
 
 ),
 
