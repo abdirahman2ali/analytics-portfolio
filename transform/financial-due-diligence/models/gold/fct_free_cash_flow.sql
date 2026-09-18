@@ -1,11 +1,4 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key=['ticker', 'period_of_report', 'filing_type'],
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
+{{ config(materialized='table') }}
 
 -- FCF components, ratios, growth, trends, and CapEx intensity.
 -- Grain: ticker + period_of_report + filing_type
@@ -13,10 +6,6 @@
 with base as (
 
     select * from {{ ref('int_financials_combined') }}
-
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
 
 ),
 

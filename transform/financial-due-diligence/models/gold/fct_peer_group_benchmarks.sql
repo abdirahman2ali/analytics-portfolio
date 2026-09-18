@@ -1,11 +1,4 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key=['gics_sector', 'period_of_report', 'filing_type'],
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
+{{ config(materialized='table') }}
 
 -- Computes p20/p40/p60/p80 percentiles and sector median per metric, per sector per period.
 -- Grain: gics_sector + period_of_report + filing_type
@@ -13,10 +6,6 @@
 with metrics as (
 
     select * from {{ ref('fct_financial_metrics') }}
-
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
 
 ),
 

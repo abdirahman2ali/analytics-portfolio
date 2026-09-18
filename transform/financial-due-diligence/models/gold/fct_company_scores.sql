@@ -1,11 +1,4 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key=['ticker', 'period_of_report', 'filing_type'],
-        file_format='delta',
-        incremental_strategy='merge'
-    )
-}}
+{{ config(materialized='table') }}
 
 -- Weighted composite score, letter grade, peer rank, and red/yellow flag overlays.
 -- Grain: ticker + period_of_report + filing_type
@@ -13,10 +6,6 @@
 with scores as (
 
     select * from {{ ref('fct_metric_scores') }}
-
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
 
 ),
 
