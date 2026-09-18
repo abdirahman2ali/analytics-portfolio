@@ -8,6 +8,8 @@
         toronto_parking_dbt_intermediate
     {%- elif 'toronto-parking/models/marts' in path -%}
         toronto_parking_dbt_marts
+    {%- elif 'financial-due-diligence/seeds' in path -%}
+        financial_due_diligence_bronze
     {%- elif 'financial-due-diligence/models/bronze' in path -%}
         financial_due_diligence_bronze
     {%- elif 'financial-due-diligence/models/silver' in path -%}
