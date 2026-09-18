@@ -1,0 +1,34 @@
+name: portfolio
+version: "1.0.0"
+config-version: 2
+
+profile: portfolio
+
+model-paths:
+  - "nba/models"
+  - "toronto-parking/models"
+  - "financial-due-diligence/models"
+
+macro-paths: ["macros"]
+
+test-paths:
+  - "nba/tests"
+  - "toronto-parking/tests"
+  - "financial-due-diligence/tests"
+
+seed-paths:
+  - "nba/seeds"
+  - "toronto-parking/seeds"
+  - "financial-due-diligence/seeds"
+
+analysis-paths:
+  - "nba/analyses"
+  - "toronto-parking/analyses"
+  - "financial-due-diligence/analyses"
+
+clean-targets:
+  - "target"
+
+models:
+  portfolio:
+    +materialized: view
