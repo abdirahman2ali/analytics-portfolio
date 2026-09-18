@@ -11,15 +11,32 @@
 -- Score bands: top 10% → 90-100, 10-25% → 75-89, 25-50% → 50-74, 50-75% → 25-49, bottom 25% → 0-24.
 -- Grain: ticker + period_of_report + filing_type
 
+{% if is_incremental() %}
+
+with max_date as (
+
+    select max(filed_date) as cutoff from {{ this }}
+
+),
+
+metrics as (
+
+    select m.*
+    from {{ ref('fct_financial_metrics') }} as m
+    cross join max_date
+    where m.filed_date > max_date.cutoff
+
+),
+
+{% else %}
+
 with metrics as (
 
     select * from {{ ref('fct_financial_metrics') }}
 
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
-
 ),
+
+{% endif %}
 
 ranked as (
 

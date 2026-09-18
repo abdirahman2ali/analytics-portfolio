@@ -10,15 +10,32 @@
 -- Computes p20/p40/p60/p80 percentiles and sector median per metric, per sector per period.
 -- Grain: gics_sector + period_of_report + filing_type
 
+{% if is_incremental() %}
+
+with max_date as (
+
+    select max(filed_date) as cutoff from {{ this }}
+
+),
+
+metrics as (
+
+    select m.*
+    from {{ ref('fct_financial_metrics') }} as m
+    cross join max_date
+    where m.filed_date > max_date.cutoff
+
+),
+
+{% else %}
+
 with metrics as (
 
     select * from {{ ref('fct_financial_metrics') }}
 
-    {% if is_incremental() %}
-        where filed_date > (select max(filed_date) from {{ this }})
-    {% endif %}
-
 ),
+
+{% endif %}
 
 benchmarks as (
 
