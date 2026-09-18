@@ -46,6 +46,7 @@ windowed as (
         total_equity,
         long_term_debt,
         short_term_debt,
+        interest_expense,
 
         -- YoY growth uses 4-quarter lag for quarterly filings
         lag(revenue, 4) over (partition by ticker, filing_type order by period_of_report) as revenue_4q_ago,
