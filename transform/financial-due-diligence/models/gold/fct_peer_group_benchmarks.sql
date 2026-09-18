@@ -12,9 +12,9 @@
 
 {% if is_incremental() %}
 
-with max_date as (
+with max_period as (
 
-    select max(filed_date) as cutoff from {{ this }}
+    select max(period_of_report) as cutoff from {{ this }}
 
 ),
 
@@ -22,8 +22,8 @@ metrics as (
 
     select m.*
     from {{ ref('fct_financial_metrics') }} as m
-    cross join max_date
-    where m.filed_date > max_date.cutoff
+    cross join max_period
+    where m.period_of_report > max_period.cutoff
 
 ),
 
