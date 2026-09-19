@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: fct_market_multiples
+    description: >
+      Market multiples for S&P 500 constituents. One row per ticker, representing the most
+      recent LTM (trailing 12 months) 10-Q snapshot joined to the latest available close price.
+      Grain: ticker. EV excludes cash and cash equivalents (not available from EDGAR XBRL).
+    columns:
+      - name: ticker
+        description: "Equity ticker symbol."
+        tests:
+          - not_null
+          - unique
+      - name: cik
+        description: "Zero-padded 10-digit SEC CIK."
+        tests:
+          - not_null
+      - name: company_name
+        description: "Company legal name from EDGAR."
+      - name: gics_sector
+        description: "GICS sector classification."
+      - name: gics_sub_industry
+        description: "GICS sub-industry classification."
+      - name: ltm_period_end
+        description: "End date of the most recent 10-Q period used for LTM calculations."
+        tests:
+          - not_null
+      - name: filed_date
+        description: "Date the most recent 10-Q was filed with EDGAR."
+      - name: fiscal_year
+        description: "Fiscal year of the most recent 10-Q period."
+      - name: fiscal_quarter
+        description: "Fiscal quarter of the most recent 10-Q period."
+      - name: price_date
+        description: "Trading date of the market price used for multiples."
+        tests:
+          - not_null
+      - name: close_price
+        description: "Adjusted closing price in USD."
+      - name: shares_outstanding
+        description: "Total shares outstanding at time of market data ingestion."
+      - name: market_cap
+        description: "Market capitalization in USD: close_price × shares_outstanding."
+      - name: ltm_net_income
+        description: "LTM net income: sum of the 4 most recent quarterly net_income values."
+      - name: ltm_ebit
+        description: "LTM EBIT: sum of the 4 most recent quarterly EBIT values."
+      - name: ltm_fcf
+        description: "LTM free cash flow: sum of the 4 most recent quarterly FCF values."
+      - name: ltm_revenue
+        description: "LTM revenue: sum of the 4 most recent quarterly revenue values."
+      - name: total_equity
+        description: "Total shareholders equity from the most recent balance sheet."
+      - name: long_term_debt
+        description: "Long-term debt from the most recent balance sheet. Null coalesced to 0."
+      - name: short_term_debt
+        description: "Short-term debt / current portion of LTD from the most recent balance sheet. Null coalesced to 0."
+      - name: ev_approx
+        description: "Approximate enterprise value: market_cap + long_term_debt + short_term_debt. Excludes cash."
+      - name: pe_ratio
+        description: "Price-to-earnings: market_cap / ltm_net_income. Null when ltm_net_income is zero or negative."
+      - name: p_fcf_ratio
+        description: "Price-to-free-cash-flow: market_cap / ltm_fcf. Null when ltm_fcf is zero or negative."
+      - name: price_to_book
+        description: "Price-to-book: market_cap / total_equity. Null when total_equity is zero."
+      - name: ev_to_ebit
+        description: "EV/EBIT: ev_approx / ltm_ebit. Null when ltm_ebit is zero. Note: EV excludes cash."
