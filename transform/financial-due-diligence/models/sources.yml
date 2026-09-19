@@ -73,3 +73,35 @@ sources:
             description: "Timestamp of the last checkpoint update."
             tests:
               - not_null
+
+  - name: market_raw
+    description: "Daily market data for S&P 500 constituents ingested by market_data_ingestion.py."
+    database: "{{ target.database }}"
+    schema: "financial_due_diligence_bronze"
+    loaded_at_field: ingested_at
+    freshness:
+      warn_after: {count: 3, period: day}
+      error_after: {count: 7, period: day}
+
+    tables:
+      - name: brz_market_data
+        description: "One row per (ticker, price_date). Latest close price, shares outstanding, and market cap for each S&P 500 constituent."
+        columns:
+          - name: ticker
+            description: "Equity ticker symbol."
+            tests:
+              - not_null
+          - name: price_date
+            description: "Trading date the price corresponds to."
+            tests:
+              - not_null
+          - name: close_price
+            description: "Adjusted closing price in USD."
+          - name: shares_outstanding
+            description: "Total shares outstanding at time of ingestion."
+          - name: market_cap
+            description: "Market capitalization: close_price × shares_outstanding."
+          - name: ingested_at
+            description: "UTC timestamp when this record was written by the ingestion script."
+            tests:
+              - not_null
