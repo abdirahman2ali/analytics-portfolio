@@ -49,13 +49,13 @@ ranked as (
         -- lower is better: invert by ordering desc
         percent_rank() over (
             partition by gics_sector, filing_type, period_of_report
-            order by debt_to_ebitda desc nulls last
-        ) as debt_to_ebitda_pct,
+            order by debt_to_ebit desc nulls last
+        ) as debt_to_ebit_pct,
 
         percent_rank() over (
             partition by gics_sector, filing_type, period_of_report
-            order by current_ratio asc nulls last
-        ) as current_ratio_pct,
+            order by assets_to_liabilities asc nulls last
+        ) as assets_to_liabilities_pct,
 
         percent_rank() over (
             partition by gics_sector, filing_type, period_of_report
@@ -99,8 +99,8 @@ scored as (
         net_income_margin,
         fcf_margin,
         fcf_conversion,
-        debt_to_ebitda,
-        current_ratio,
+        debt_to_ebit,
+        assets_to_liabilities,
         interest_coverage,
         revenue_consistency,
         gross_margin_trend,
@@ -110,16 +110,16 @@ scored as (
         total_equity,
         revenue,
 
-        {{ score_metric('revenue_growth_yoy_pct') }} as revenue_growth_yoy_score,
-        {{ score_metric('revenue_cagr_3yr_pct') }} as revenue_cagr_3yr_score,
-        {{ score_metric('gross_margin_pct') }} as gross_margin_score,
-        {{ score_metric('ebitda_margin_pct') }} as ebitda_margin_score,
-        {{ score_metric('fcf_margin_pct') }} as fcf_margin_score,
-        {{ score_metric('fcf_conversion_pct') }} as fcf_conversion_score,
-        {{ score_metric('debt_to_ebitda_pct') }} as debt_to_ebitda_score,
-        {{ score_metric('current_ratio_pct') }} as current_ratio_score,
-        {{ score_metric('interest_coverage_pct') }} as interest_coverage_score,
-        {{ score_metric('revenue_consistency_pct') }} as revenue_consistency_score
+        {{ score_metric('revenue_growth_yoy_pct', 'revenue_growth_yoy') }} as revenue_growth_yoy_score,
+        {{ score_metric('revenue_cagr_3yr_pct', 'revenue_cagr_3yr') }} as revenue_cagr_3yr_score,
+        {{ score_metric('gross_margin_pct', 'gross_margin') }} as gross_margin_score,
+        {{ score_metric('ebitda_margin_pct', 'ebitda_margin') }} as ebitda_margin_score,
+        {{ score_metric('fcf_margin_pct', 'fcf_margin') }} as fcf_margin_score,
+        {{ score_metric('fcf_conversion_pct', 'fcf_conversion') }} as fcf_conversion_score,
+        {{ score_metric('debt_to_ebit_pct', 'debt_to_ebit') }} as debt_to_ebit_score,
+        {{ score_metric('assets_to_liabilities_pct', 'assets_to_liabilities') }} as assets_to_liabilities_score,
+        {{ score_metric('interest_coverage_pct', 'interest_coverage') }} as interest_coverage_score,
+        {{ score_metric('revenue_consistency_pct', 'revenue_consistency') }} as revenue_consistency_score
 
     from ranked
 

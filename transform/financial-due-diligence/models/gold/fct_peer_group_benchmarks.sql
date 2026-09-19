@@ -58,19 +58,19 @@ benchmarks as (
         percentile_cont(0.6) within group (order by fcf_conversion) as fcf_conversion_p60,
         percentile_cont(0.8) within group (order by fcf_conversion) as fcf_conversion_p80,
 
-        -- debt_to_ebitda (lower is better — inverted in scoring)
-        percentile_cont(0.2) within group (order by debt_to_ebitda) as debt_to_ebitda_p20,
-        percentile_cont(0.4) within group (order by debt_to_ebitda) as debt_to_ebitda_p40,
-        percentile_cont(0.5) within group (order by debt_to_ebitda) as debt_to_ebitda_median,
-        percentile_cont(0.6) within group (order by debt_to_ebitda) as debt_to_ebitda_p60,
-        percentile_cont(0.8) within group (order by debt_to_ebitda) as debt_to_ebitda_p80,
+        -- debt_to_ebit (lower is better — inverted in scoring)
+        percentile_cont(0.2) within group (order by debt_to_ebit) as debt_to_ebit_p20,
+        percentile_cont(0.4) within group (order by debt_to_ebit) as debt_to_ebit_p40,
+        percentile_cont(0.5) within group (order by debt_to_ebit) as debt_to_ebit_median,
+        percentile_cont(0.6) within group (order by debt_to_ebit) as debt_to_ebit_p60,
+        percentile_cont(0.8) within group (order by debt_to_ebit) as debt_to_ebit_p80,
 
-        -- current_ratio
-        percentile_cont(0.2) within group (order by current_ratio) as current_ratio_p20,
-        percentile_cont(0.4) within group (order by current_ratio) as current_ratio_p40,
-        percentile_cont(0.5) within group (order by current_ratio) as current_ratio_median,
-        percentile_cont(0.6) within group (order by current_ratio) as current_ratio_p60,
-        percentile_cont(0.8) within group (order by current_ratio) as current_ratio_p80,
+        -- assets_to_liabilities
+        percentile_cont(0.2) within group (order by assets_to_liabilities) as assets_to_liabilities_p20,
+        percentile_cont(0.4) within group (order by assets_to_liabilities) as assets_to_liabilities_p40,
+        percentile_cont(0.5) within group (order by assets_to_liabilities) as assets_to_liabilities_median,
+        percentile_cont(0.6) within group (order by assets_to_liabilities) as assets_to_liabilities_p60,
+        percentile_cont(0.8) within group (order by assets_to_liabilities) as assets_to_liabilities_p80,
 
         -- interest_coverage
         percentile_cont(0.2) within group (order by interest_coverage) as interest_coverage_p20,

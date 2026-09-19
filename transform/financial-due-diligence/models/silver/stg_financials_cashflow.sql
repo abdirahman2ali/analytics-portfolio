@@ -14,10 +14,10 @@ pivoted as (
     select
         ticker,
         cik,
-        company_name,
+        max(company_name) as company_name,
         filing_type,
         period_of_report,
-        filed_date,
+        max(filed_date) as filed_date,
         fiscal_year,
         fiscal_quarter,
 
@@ -30,10 +30,8 @@ pivoted as (
     group by
         ticker,
         cik,
-        company_name,
         filing_type,
         period_of_report,
-        filed_date,
         fiscal_year,
         fiscal_quarter
 

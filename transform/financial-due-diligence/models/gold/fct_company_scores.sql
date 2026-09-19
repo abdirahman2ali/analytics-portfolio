@@ -22,8 +22,8 @@ with_flags as (
             else false
         end as flag_fcf_negative,
 
-        -- debt_overload: debt_to_ebitda > 5x
-        case when debt_to_ebitda > 5 then true else false end as flag_debt_overload,
+        -- debt_overload: debt_to_ebit > 5x
+        case when debt_to_ebit > 5 then true else false end as flag_debt_overload,
 
         -- interest_coverage_weak: interest_coverage < 2x
         case when interest_coverage < 2 then true else false end as flag_interest_coverage_weak,
@@ -52,17 +52,33 @@ composite as (
     select
         *,
 
+        -- Weighted average over available scores only; missing scores are excluded
+        -- and weights renormalize so data gaps don't penalize the composite.
         round(
-            coalesce(revenue_growth_yoy_score, 0) * 0.15
-            + coalesce(revenue_cagr_3yr_score, 0) * 0.10
-            + coalesce(gross_margin_score, 0) * 0.15
-            + coalesce(ebitda_margin_score, 0) * 0.15
-            + coalesce(fcf_margin_score, 0) * 0.10
-            + coalesce(fcf_conversion_score, 0) * 0.10
-            + coalesce(debt_to_ebitda_score, 0) * 0.10
-            + coalesce(current_ratio_score, 0) * 0.05
-            + coalesce(interest_coverage_score, 0) * 0.05
-            + coalesce(revenue_consistency_score, 0) * 0.05,
+            (
+                coalesce(revenue_growth_yoy_score * 0.15, 0)
+                + coalesce(revenue_cagr_3yr_score * 0.10, 0)
+                + coalesce(gross_margin_score * 0.15, 0)
+                + coalesce(ebitda_margin_score * 0.15, 0)
+                + coalesce(fcf_margin_score * 0.10, 0)
+                + coalesce(fcf_conversion_score * 0.10, 0)
+                + coalesce(debt_to_ebit_score * 0.10, 0)
+                + coalesce(assets_to_liabilities_score * 0.05, 0)
+                + coalesce(interest_coverage_score * 0.05, 0)
+                + coalesce(revenue_consistency_score * 0.05, 0)
+            ) / nullif(
+                case when revenue_growth_yoy_score is not null then 0.15 else 0 end
+                + case when revenue_cagr_3yr_score is not null then 0.10 else 0 end
+                + case when gross_margin_score is not null then 0.15 else 0 end
+                + case when ebitda_margin_score is not null then 0.15 else 0 end
+                + case when fcf_margin_score is not null then 0.10 else 0 end
+                + case when fcf_conversion_score is not null then 0.10 else 0 end
+                + case when debt_to_ebit_score is not null then 0.10 else 0 end
+                + case when assets_to_liabilities_score is not null then 0.05 else 0 end
+                + case when interest_coverage_score is not null then 0.05 else 0 end
+                + case when revenue_consistency_score is not null then 0.05 else 0 end,
+                0
+            ),
             1
         ) as composite_score
 
@@ -125,8 +141,8 @@ final as (
         ebitda_margin_score,
         fcf_margin_score,
         fcf_conversion_score,
-        debt_to_ebitda_score,
-        current_ratio_score,
+        debt_to_ebit_score,
+        assets_to_liabilities_score,
         interest_coverage_score,
         revenue_consistency_score,
         -- raw metrics for reference
@@ -137,8 +153,8 @@ final as (
         net_income_margin,
         fcf_margin,
         fcf_conversion,
-        debt_to_ebitda,
-        current_ratio,
+        debt_to_ebit,
+        assets_to_liabilities,
         interest_coverage,
         revenue_consistency,
         gross_margin_trend,

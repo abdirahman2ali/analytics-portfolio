@@ -103,8 +103,8 @@ metrics as (
         fcf / nullif(net_income, 0) as fcf_conversion,
 
         -- leverage & coverage
-        (coalesce(long_term_debt, 0) + coalesce(short_term_debt, 0)) / nullif(ebit, 0) as debt_to_ebitda,
-        total_assets / nullif(total_liabilities, 0) as current_ratio,
+        (coalesce(long_term_debt, 0) + coalesce(short_term_debt, 0)) / nullif(ebit, 0) as debt_to_ebit,
+        total_assets / nullif(total_liabilities, 0) as assets_to_liabilities,
         ebit / nullif(interest_expense, 0) as interest_coverage,
 
         -- consistency: coefficient of variation (lower = more consistent)
