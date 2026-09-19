@@ -9,7 +9,7 @@ model-paths:
   - "toronto-parking/models"
   - "financial-due-diligence/models"
 
-macro-paths: ["macros"]
+macro-paths: ["financial-due-diligence/macros"]
 
 test-paths:
   - "nba/tests"
