@@ -1,18 +1,23 @@
 """Fetches daily market data for S&P 500 constituents via yfinance and writes to Databricks.
 
-Pulls close price, shares outstanding, and market cap for every ticker in sp500_companies seed.
-Writes to financial_due_diligence_bronze.brz_market_data using an idempotent MERGE on (ticker, price_date).
+Strategy:
+  - Prices: yf.download() for all tickers in one batch call (rate-limit friendly).
+  - Shares outstanding: per-ticker fast_info with 0.25s sleep and retry on rate limit.
+  - Market cap: close_price × shares_outstanding (computed locally).
 """
 
 import logging
 import sys
+import time
 from datetime import datetime, timezone
+from typing import Optional
 
 from config import Settings
 from delta_writer import DeltaWriter
 from sp500_fetcher import fetch_sp500_tickers
 
 import yfinance as yf
+from yfinance.exceptions import YFRateLimitError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +27,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 _MARKET_DATA_TABLE = "brz_market_data"
+_SHARES_SLEEP_S = 0.25
+_RATE_LIMIT_BACKOFF_S = [30, 60, 120]
 
 _CREATE_MARKET_DATA_DDL = """
 CREATE TABLE IF NOT EXISTS {catalog}.{schema}.{table} (
@@ -35,7 +42,7 @@ CREATE TABLE IF NOT EXISTS {catalog}.{schema}.{table} (
 USING DELTA
 """
 
-_MERGE_MARKET_DATA_SQL = """
+_MERGE_MARKET_DATA_SPARK = """
 MERGE INTO {fqn} AS target
 USING _source_market AS source
 ON  target.ticker     = source.ticker
@@ -45,51 +52,124 @@ WHEN NOT MATCHED THEN INSERT *
 """
 
 
-def _fetch_market_records(tickers: list[str], ingested_at: str) -> tuple[list[dict], int]:
-    """Download the latest trading-day close and shares outstanding for each ticker.
+def _fetch_prices_batch(tickers: list[str]) -> dict[str, tuple[Optional[float], Optional[str]]]:
+    """Download the latest available close price for all tickers in one batch call.
 
-    Args:
-        tickers: List of equity ticker symbols.
-        ingested_at: ISO timestamp to stamp on every row.
+    Uses yf.download() which batches requests and has built-in retry logic,
+    making it significantly more rate-limit friendly than per-ticker fast_info.
 
     Returns:
-        List of market data record dicts.
+        Dict mapping ticker → (close_price, price_date_str).
+    """
+    logger.info("Downloading prices for %d tickers via yf.download()", len(tickers))
+    try:
+        df = yf.download(
+            tickers=tickers,
+            period="5d",
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+        )
+    except Exception as exc:
+        logger.error("Batch price download failed: %s", exc)
+        return {}
+
+    if df.empty:
+        logger.warning("yf.download() returned empty DataFrame")
+        return {}
+
+    # Multi-ticker download returns MultiIndex columns: (field, ticker)
+    # Single-ticker returns flat columns
+    prices: dict[str, tuple[Optional[float], Optional[str]]] = {}
+    if len(tickers) == 1:
+        close_series = df["Close"] if "Close" in df.columns else None
+        if close_series is not None and not close_series.dropna().empty:
+            latest_idx = close_series.dropna().index[-1]
+            prices[tickers[0]] = (
+                float(close_series.dropna().iloc[-1]),
+                latest_idx.strftime("%Y-%m-%d"),
+            )
+    else:
+        try:
+            close = df["Close"]
+        except KeyError:
+            logger.error("'Close' not in download result columns: %s", df.columns.tolist()[:10])
+            return {}
+        for ticker in tickers:
+            if ticker not in close.columns:
+                continue
+            series = close[ticker].dropna()
+            if series.empty:
+                continue
+            prices[ticker] = (float(series.iloc[-1]), series.index[-1].strftime("%Y-%m-%d"))
+
+    logger.info("Prices retrieved for %d / %d tickers", len(prices), len(tickers))
+    return prices
+
+
+def _fetch_shares(ticker: str) -> Optional[float]:
+    """Fetch shares outstanding via fast_info with sleep and retry on rate limit."""
+    for attempt, backoff in enumerate([0] + _RATE_LIMIT_BACKOFF_S):
+        if backoff:
+            logger.warning("Rate limited on %s (attempt %d), waiting %ds", ticker, attempt, backoff)
+            time.sleep(backoff)
+        try:
+            time.sleep(_SHARES_SLEEP_S)
+            val = yf.Ticker(ticker).fast_info.shares
+            return float(val) if val is not None else None
+        except YFRateLimitError:
+            continue
+        except Exception as exc:
+            logger.error("Failed to get shares for %s: %s", ticker, exc)
+            return None
+    logger.error("Exhausted retries for shares on %s", ticker)
+    return None
+
+
+def _build_records(
+    tickers: list[str],
+    prices: dict[str, tuple[Optional[float], Optional[str]]],
+    ingested_at: str,
+) -> tuple[list[dict], int]:
+    """Combine price data with shares outstanding into records.
+
+    Tickers with no price are skipped. Shares/market_cap may be null if fetch fails.
     """
     records: list[dict] = []
     errors = 0
+    price_date_fallback = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for ticker in tickers:
-        try:
-            info = yf.Ticker(ticker).fast_info
-            price = getattr(info, "last_price", None)
-            shares = getattr(info, "shares", None)
-            market_cap = (price * shares) if (price and shares) else None
-
-            price_date_ts = getattr(info, "last_volume_dt", None)
-            if price_date_ts:
-                price_date = price_date_ts.strftime("%Y-%m-%d")
-            else:
-                price_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-            records.append({
-                "ticker": ticker,
-                "price_date": price_date,
-                "close_price": float(price) if price is not None else None,
-                "shares_outstanding": float(shares) if shares is not None else None,
-                "market_cap": float(market_cap) if market_cap is not None else None,
-                "ingested_at": ingested_at,
-            })
-            logger.info("%s: price=%.2f shares=%s", ticker, price or 0, shares)
-
-        except Exception as exc:
-            logger.error("Failed to fetch %s: %s", ticker, exc, exc_info=True)
+        price_info = prices.get(ticker)
+        if price_info is None:
+            logger.warning("%s: no price data — skipping", ticker)
             errors += 1
+            continue
+
+        close_price, price_date = price_info
+        shares = _fetch_shares(ticker)
+        market_cap = (close_price * shares) if (close_price and shares) else None
+
+        records.append({
+            "ticker": ticker,
+            "price_date": price_date or price_date_fallback,
+            "close_price": close_price,
+            "shares_outstanding": shares,
+            "market_cap": market_cap,
+            "ingested_at": ingested_at,
+        })
+        logger.info(
+            "%s: price=%.2f shares=%s mktcap=%s",
+            ticker,
+            close_price or 0,
+            f"{shares/1e9:.2f}B" if shares else "n/a",
+            f"${market_cap/1e9:.1f}B" if market_cap else "n/a",
+        )
 
     return records, errors
 
 
 def _ensure_market_table(writer: DeltaWriter) -> None:
-    """Create brz_market_data if it does not already exist."""
     cat = writer._settings.databricks_catalog
     sch = writer._settings.databricks_schema_bronze
     ddl = _CREATE_MARKET_DATA_DDL.format(catalog=cat, schema=sch, table=_MARKET_DATA_TABLE)
@@ -102,7 +182,6 @@ def _ensure_market_table(writer: DeltaWriter) -> None:
 
 
 def _write_market_records(writer: DeltaWriter, records: list[dict]) -> None:
-    """Upsert market data records into brz_market_data."""
     if not records:
         return
 
@@ -130,7 +209,7 @@ def _write_market_records(writer: DeltaWriter, records: list[dict]) -> None:
         df = writer._spark.createDataFrame(rows, schema)
         df = df.withColumn("price_date", df["price_date"].cast(DateType()))
         df.createOrReplaceTempView("_source_market")
-        writer._spark.sql(_MERGE_MARKET_DATA_SQL.format(fqn=fqn))
+        writer._spark.sql(_MERGE_MARKET_DATA_SPARK.format(fqn=fqn))
     else:
         merge_sql = f"""
             MERGE INTO {fqn} AS target
@@ -152,7 +231,6 @@ def _write_market_records(writer: DeltaWriter, records: list[dict]) -> None:
 
 
 def main() -> None:
-    """Fetch latest market data for all S&P 500 constituents and upsert into bronze."""
     logger.info("Starting market data ingestion")
 
     settings = Settings.from_env()
@@ -164,9 +242,10 @@ def main() -> None:
 
         companies = fetch_sp500_tickers(settings.edgar_user_agent)
         tickers = [c.ticker for c in companies]
-        logger.info("Fetching market data for %d tickers", len(tickers))
+        logger.info("Processing %d tickers", len(tickers))
 
-        records, errors = _fetch_market_records(tickers, ingested_at)
+        prices = _fetch_prices_batch(tickers)
+        records, errors = _build_records(tickers, prices, ingested_at)
 
         if records:
             _write_market_records(writer, records)
@@ -176,12 +255,14 @@ def main() -> None:
             len(records),
             errors,
         )
+        if errors > 0:
+            logger.warning("%d tickers had no price data and were skipped", errors)
 
     finally:
         writer.close()
 
-    if errors == len(tickers):
-        logger.error("All tickers failed — exiting with non-zero status")
+    if len(records) == 0:
+        logger.error("Zero records written — exiting with non-zero status")
         sys.exit(1)
 
 
