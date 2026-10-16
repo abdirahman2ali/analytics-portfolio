@@ -69,7 +69,7 @@ Copy `.env.example` to `.env` and fill in all values:
 
 ### dbt profiles
 
-Copy `dbt/profiles.yml` to `~/.dbt/profiles.yml` (or keep it in the project directory and set `DBT_PROFILES_DIR`). It reads from the same env vars above — no edits needed.
+Copy `transform/financial-due-diligence/profiles.yml` to `~/.dbt/profiles.yml` (or keep it in the project directory and set `DBT_PROFILES_DIR`). It reads from the same env vars above, plus `DBT_BRANCH_SLUG` for the `dev` target and `DATABRICKS_HOST`/`DATABRICKS_CATALOG`.
 
 ## Running the pipeline
 
@@ -84,8 +84,11 @@ Fetches XBRL facts for all S&P 500 companies from EDGAR and writes new records t
 
 ### 2. dbt
 
+Local runs use the `dev` target, which builds into `dev_<DBT_BRANCH_SLUG>` instead of the prod schemas (see the root README). Set the slug first:
+
 ```bash
-cd financial-due-diligence/dbt
+cd transform/financial-due-diligence
+export DBT_BRANCH_SLUG=my_branch  # lowercase letters, digits, underscores
 dbt deps                          # install dbt_utils package
 dbt seed                          # load sp500_companies.csv
 dbt build --select bronze+        # build all layers + run tests
