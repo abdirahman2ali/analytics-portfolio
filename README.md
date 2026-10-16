@@ -38,6 +38,21 @@ analytics-portfolio/
             └── marts/
 ```
 
+## Local dbt development (financial-due-diligence)
+
+The `prod` target (used by the Databricks job) writes to `financial_due_diligence_{bronze,silver,gold}`. Local runs use the `dev` target, which builds every layer into one schema, `dev_<DBT_BRANCH_SLUG>`, so parallel branches never overwrite each other or prod. Raw source tables are still read from the prod bronze schema.
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DBT_BRANCH_SLUG` | Branch identifier, lowercase letters, digits and underscores | `feat_add_scoring_chart` |
+
+```sh
+cd transform/financial-due-diligence
+DBT_BRANCH_SLUG=feat_add_scoring_chart dbt build --target dev
+```
+
+Never run `--target prod` locally. The macro rejects any non-prod schema that does not match `dev_<slug>`. Drop the `dev_<slug>` schema once the branch is merged.
+
 ## Stack
 
 Python, Databricks (Delta Lake, serverless compute), dbt Core, Omni
