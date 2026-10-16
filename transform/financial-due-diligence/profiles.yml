@@ -1,5 +1,5 @@
 financial_due_diligence:
-  target: prod
+  target: dev
   outputs:
     prod:
       type: databricks

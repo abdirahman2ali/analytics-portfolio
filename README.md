@@ -40,7 +40,7 @@ analytics-portfolio/
 
 ## Local dbt development (financial-due-diligence)
 
-The `prod` target (used by the Databricks job) writes to `financial_due_diligence_{bronze,silver,gold}`. Local runs use the `dev` target, which builds every layer into one schema, `dev_<DBT_BRANCH_SLUG>`, so parallel branches never overwrite each other or prod. Raw source tables are still read from the prod bronze schema.
+Every target except `dev` writes to `financial_due_diligence_{bronze,silver,gold}`. That includes the `databricks_cluster` target the Databricks job generates for itself, which does not read `profiles.yml`. Local runs use the `dev` target (the default in `profiles.yml`), which builds every layer into one schema, `dev_<DBT_BRANCH_SLUG>`, so parallel branches never overwrite each other or prod. Raw source tables are still read from the prod bronze schema.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -51,7 +51,7 @@ cd transform/financial-due-diligence
 DBT_BRANCH_SLUG=feat_add_scoring_chart dbt build --target dev
 ```
 
-Never run `--target prod` locally. The macro rejects any non-prod schema that does not match `dev_<slug>`. Drop the `dev_<slug>` schema once the branch is merged.
+Never run `--target prod` locally. The macro rejects a `dev` schema that does not match `dev_<slug>`. Drop the `dev_<slug>` schema once the branch is merged.
 
 ## Stack
 
