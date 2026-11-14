@@ -16,6 +16,10 @@ transform/target/
 transform/dbt_packages/
 transform/logs/
 transform/profiles.yml
+transform/*/target/
+transform/*/dbt_packages/
+transform/*/logs/
+transform/*/.user.yml
 
 # ClickHouse runtime artifacts
 access/
