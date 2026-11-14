@@ -168,22 +168,66 @@ class GuardTests(unittest.TestCase):
             "transform/nba/dbt_packages/x.sql",
             "README.md",
             "CLAUDE.md",
+            "transform/nba/packages.yml",
+            "transform/nba/dbt_project.yml",
+            "transform/financial-due-diligence/macros/generate_schema_name.sql",
         ):
             self.assertTrue(check_changes.violations([("M", path)], []), path)
 
+    def test_other_macros_are_not_protected(self):
+        self.assertEqual(
+            check_changes.violations([("M", "transform/financial-due-diligence/macros/score_metric.sql")], []),
+            [],
+        )
+
     def test_rejects_deleted_tests_and_removed_elementary_tests(self):
+        schema = "transform/nba/models/marts/schema.yml"
         self.assertTrue(check_changes.violations([("D", "transform/nba/tests/t.sql")], []))
         self.assertTrue(
             check_changes.violations(
-                [("M", "transform/nba/models/marts/schema.yml")], ["      - elementary.volume_anomalies:"]
+                [("M", schema)], [(schema, "-", "      - elementary.volume_anomalies:")]
             )
         )
         self.assertEqual(
-            check_changes.violations(
-                [("M", "transform/nba/models/marts/schema.yml")], ["          sensitivity: 3"]
-            ),
+            check_changes.violations([("M", schema)], [(schema, "+", "          anomaly_sensitivity: 4")]),
             [],
         )
+
+    def test_rejects_silencing_a_test_through_config(self):
+        schema = "transform/nba/models/marts/schema.yml"
+        for sign, text in (
+            ("-", "            severity: warn"),
+            ("+", "            severity: error"),
+            ("+", "          enabled: false"),
+            ("+", "      +enabled: false"),
+            ("+", "          error_if: '>1000000'"),
+            ("+", "          warn_if: '>1000000'"),
+        ):
+            self.assertTrue(
+                check_changes.violations([("M", schema)], [(schema, sign, text)]), text
+            )
+
+    def test_severity_in_sql_is_not_gated(self):
+        sql = "transform/nba/models/marts/m.sql"
+        self.assertEqual(check_changes.violations([("M", sql)], [(sql, "+", "-- severity: note")]), [])
+
+    def test_parse_diff_reads_headers_only_before_hunks(self):
+        diff = """diff --git a/transform/nba/a.sql b/transform/nba/a.sql
+--- a/transform/nba/a.sql
++++ b/transform/nba/a.sql
+@@ -1,2 +1,2 @@
+--- a comment that starts with dashes
++++ plus plus plus
+diff --git a/transform/nba/gone.yml b/transform/nba/gone.yml
+deleted file mode 100644
+--- a/transform/nba/gone.yml
++++ /dev/null
+@@ -1 +0,0 @@
+-      - elementary.volume_anomalies:"""
+        parsed = check_changes.parse_diff(diff)
+        self.assertEqual(parsed[0], ("transform/nba/a.sql", "-", "-- a comment that starts with dashes"))
+        self.assertEqual(parsed[1], ("transform/nba/a.sql", "+", "++ plus plus plus"))
+        self.assertEqual(parsed[2], ("transform/nba/gone.yml", "-", "      - elementary.volume_anomalies:"))
 
     def test_rejects_too_many_files_and_empty(self):
         many = [("M", f"transform/nba/models/m{i}.sql") for i in range(16)]
@@ -224,6 +268,59 @@ class GuardGitTests(unittest.TestCase):
                 self.write(path, "nothing here\n")
                 self.git(d, "commit", "-qam", "silence")
                 self.assertEqual(check_changes.main(base), 1)  # removed the Elementary test
+            finally:
+                os.chdir(cwd)
+
+    def test_severity_change_is_rejected_end_to_end(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.git(d, "init", "-q", "-b", "main")
+            self.git(d, "config", "user.email", "t@example.com")
+            self.git(d, "config", "user.name", "t")
+            os.makedirs(os.path.join(d, "transform", "nba"))
+            path = os.path.join(d, "transform", "nba", "schema.yml")
+            self.write(path, "- elementary.volume_anomalies:\n    config:\n      severity: warn\n")
+            self.git(d, "add", "-A")
+            self.git(d, "commit", "-q", "-m", "base")
+            base = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=d, capture_output=True, text=True, check=True
+            ).stdout.strip()
+            self.write(path, "- elementary.volume_anomalies:\n    config:\n      severity: error\n")
+            self.git(d, "commit", "-qam", "tighten")
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                self.assertEqual(check_changes.main(base), 1)
+            finally:
+                os.chdir(cwd)
+
+    def test_repo_config_hooks_do_not_run_during_the_guard(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.git(d, "init", "-q", "-b", "main")
+            self.git(d, "config", "user.email", "t@example.com")
+            self.git(d, "config", "user.name", "t")
+            os.makedirs(os.path.join(d, "transform", "nba"))
+            path = os.path.join(d, "transform", "nba", "schema.yml")
+            self.write(path, "a: 1\n")
+            self.git(d, "add", "-A")
+            self.git(d, "commit", "-q", "-m", "base")
+            base = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=d, capture_output=True, text=True, check=True
+            ).stdout.strip()
+            self.write(path, "a: 2\n")
+            self.git(d, "commit", "-qam", "change")
+            marker = os.path.join(d, "ran-marker")
+            hook = os.path.join(d, "evil.sh")
+            self.write(hook, f"#!/bin/sh\ntouch '{marker}'\n")
+            os.chmod(hook, 0o755)
+            self.git(d, "config", "core.fsmonitor", hook)
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                self.assertEqual(check_changes.main(base), 0)
+                self.assertFalse(os.path.exists(marker), "fsmonitor from repo config ran")
+                # Control: plain git does run it, so the assertion above means something.
+                subprocess.run(["git", "status"], cwd=d, check=True, capture_output=True)
+                self.assertTrue(os.path.exists(marker), "control: plain git should run fsmonitor")
             finally:
                 os.chdir(cwd)
 

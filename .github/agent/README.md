@@ -17,15 +17,28 @@ Files:
 - `collect_anomalies.py`: read-only query of the three Elementary schemas. Standard library only.
 - `triage-prompt.md`: the agent's instructions.
 - `check_changes.py`: guard. Edits only under `transform/` and `ingestion/`, at most 15 files,
-  no `.github/`, `.claude/`, `CLAUDE.md`, `.env`, `profiles.yml`, lock files, `dbt_packages/`,
-  no deleted tests, no removed Elementary tests.
+  no `.github/`, `.claude/`, `CLAUDE.md`, `.env`, `profiles.yml`, `packages.yml`,
+  `dbt_project.yml`, `generate_schema_name.sql`, lock files or `dbt_packages/`, no deleted tests,
+  no removed Elementary tests, and no added or changed `severity`, `enabled`, `warn_if`,
+  `error_if`, `fail_calc` or `limit` in YAML. It runs git with `core.fsmonitor` and hooks off.
 - `render_issues.py`: turns the agent's `triage.json` into issues. Agent text is cleaned and
   `@mentions` are defused.
 - `parse_project.sh`: lets the agent check an edit parses, using dummy connection values.
 - `tests/`: `python3 -m unittest discover -s .github/agent/tests`. The workflow runs them first.
 
-The workflow runs the scripts from a copy taken before the agent starts, so the agent editing
-them has no effect.
+The agent runs with a write token it never sees, so it must not be able to steer the steps that
+do. Three layers protect those steps:
+
+1. Deny rules stop the agent editing `/tmp/agent/trusted/`, the collected anomalies, `.git/` and
+   the dbt environment. The trusted copy is also read-only on disk.
+2. The workflow fingerprints the trusted scripts, `anomalies.json`, `.git/config` and
+   `.git/hooks` before the agent starts and checks them after, in plain shell. On a mismatch
+   nothing is pushed or rendered, and a fixed-text issue reports a possible prompt injection.
+3. git runs with `core.fsmonitor` and hooks off, dbt is called by absolute path and never added
+   to `PATH`, and agent text in PR titles and bodies has `@` removed.
+
+If the agent step fails or times out, the issue step still runs, so the anomalies are reported
+once instead of being retried every day.
 
 ## One-time setup (the agent stays off until the last step)
 

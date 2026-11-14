@@ -55,6 +55,9 @@ jobs:
         run: |
           mkdir -p /tmp/agent/trusted
           cp .github/agent/*.py .github/agent/*.sh /tmp/agent/trusted/
+          # Read-only, as a second layer on top of the deny rules and the fingerprint below.
+          chmod 444 /tmp/agent/trusted/*
+          chmod 555 /tmp/agent/trusted
           python3 -m unittest discover -s .github/agent/tests
 
       - name: Create a scoped GitHub App token
@@ -107,10 +110,11 @@ jobs:
       - name: Install dbt and the projects' packages
         if: steps.collect.outputs.has_findings == 'true'
         run: |
+          # Versions match what the projects were tested with. dbt is called by absolute path
+          # (DBT_BIN) and never added to PATH, so the agent cannot shadow git, gh or python.
           uv venv /tmp/dbtenv
-          uv pip install --python /tmp/dbtenv/bin/python dbt-databricks
-          echo "/tmp/dbtenv/bin" >> "$GITHUB_PATH"
-          export PATH="/tmp/dbtenv/bin:$PATH"
+          uv pip install --python /tmp/dbtenv/bin/python dbt-core==1.11.2 dbt-databricks==1.12.5
+          export DBT_BIN=/tmp/dbtenv/bin/dbt
           for p in financial-due-diligence nba toronto-parking; do
             bash /tmp/agent/trusted/parse_project.sh "$p" deps
           done
@@ -126,9 +130,21 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Fingerprint what the agent must not change
+        if: steps.collect.outputs.has_findings == 'true'
+        id: fingerprint
+        run: |
+          # Plain shell on purpose: this check must not depend on any file the agent can edit.
+          scripts="$( (cd /tmp/agent/trusted && sha256sum -- *; sha256sum /tmp/agent/anomalies.json) | sha256sum | cut -d' ' -f1)"
+          gitstate="$( { sha256sum .git/config; find .git/hooks -type f -print0 | sort -z | xargs -0 -r sha256sum; } | sha256sum | cut -d' ' -f1)"
+          echo "scripts=$scripts" >> "$GITHUB_OUTPUT"
+          echo "gitstate=$gitstate" >> "$GITHUB_OUTPUT"
+
       - name: Run the triage agent
         if: steps.collect.outputs.has_findings == 'true'
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
+        env:
+          DBT_BIN: /tmp/dbtenv/bin/dbt
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Read only token. The agent cannot push, open PRs or touch issues.
@@ -139,10 +155,26 @@ jobs:
           claude_args: >-
             --max-turns 40
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(bash /tmp/agent/trusted/parse_project.sh:*),Bash(git add:*),Bash(git commit:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
-            --disallowedTools "WebFetch,WebSearch"
+            --disallowedTools "WebFetch,WebSearch,Edit(//tmp/agent/trusted/**),Edit(//tmp/agent/anomalies.json),Edit(//tmp/agent/open_keys.txt),Edit(//tmp/agent/context.md),Edit(//tmp/dbtenv/**),Edit(.git/**)"
+
+      - name: Verify the agent left its environment alone
+        if: always() && steps.collect.outputs.has_findings == 'true'
+        id: verify
+        env:
+          WANT_SCRIPTS: ${{ steps.fingerprint.outputs.scripts }}
+          WANT_GITSTATE: ${{ steps.fingerprint.outputs.gitstate }}
+        run: |
+          scripts="$( (cd /tmp/agent/trusted && sha256sum -- *; sha256sum /tmp/agent/anomalies.json) | sha256sum | cut -d' ' -f1)"
+          gitstate="$( { sha256sum .git/config; find .git/hooks -type f -print0 | sort -z | xargs -0 -r sha256sum; } | sha256sum | cut -d' ' -f1)"
+          if [ "$scripts" = "$WANT_SCRIPTS" ] && [ "$gitstate" = "$WANT_GITSTATE" ]; then
+            echo "tampered=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::The agent changed the trusted scripts, the collected anomalies or the git config. Nothing from this run will be pushed or rendered."
+            echo "tampered=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Guard, check what the agent changed
-        if: steps.collect.outputs.has_findings == 'true' && steps.gate.outputs.allow_pr == 'true'
+        if: steps.collect.outputs.has_findings == 'true' && steps.gate.outputs.allow_pr == 'true' && steps.verify.outputs.tampered == 'false'
         id: guard
         env:
           BASE: ${{ steps.branch.outputs.base }}
@@ -160,27 +192,34 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           BRANCH: ${{ steps.branch.outputs.name }}
         run: |
+          # The checkout is writable by the agent, so run git with repo-config hooks switched off.
+          g() { git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
           B64="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           echo "::add-mask::$B64"
-          git -c "http.extraheader=AUTHORIZATION: basic $B64" push origin "$BRANCH"
+          g -c "http.extraheader=AUTHORIZATION: basic $B64" push origin "$BRANCH"
+          # The commit message is agent text. Drop @ so it cannot ping anyone.
+          subject="$(g log -1 --format=%s | tr -d '@' | cut -c1-120)"
           {
             echo "Proposed by the Elementary triage agent for anomalies flagged in Databricks."
             echo "Each anomaly has its own issue with the agent's reasoning."
             echo
-            git log -1 --format=%b
+            g log -1 --format=%b | tr -d '@'
             echo
             echo "Review before merging. Nothing merges automatically."
             echo
             echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
           } > /tmp/agent/pr-body.md
           url="$(gh pr create --repo "$GITHUB_REPOSITORY_NAME" --base main --head "$BRANCH" \
-            --title "Elementary triage: $(git log -1 --format=%s)" --body-file /tmp/agent/pr-body.md \
+            --title "Elementary triage: $subject" --body-file /tmp/agent/pr-body.md \
             --label automated)"
           echo "Opened $url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # always(): if the agent step fails or times out there is still no triage.json, and the
+      # renderer then opens an issue per anomaly saying so. Without an open issue the same
+      # anomalies would be re-triaged and fail again every day.
       - name: Open an issue per anomaly
-        if: steps.collect.outputs.has_findings == 'true'
+        if: always() && steps.collect.outputs.has_findings == 'true' && steps.verify.outputs.tampered == 'false'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR_URL: ${{ steps.pr.outputs.url }}
@@ -198,3 +237,19 @@ jobs:
             gh issue create --repo "$GITHUB_REPOSITORY_NAME" --title "$title" \
               --body-file "$file" --label "$labels"
           done
+
+      # Plain shell with fixed text. Nothing the agent could have edited runs here.
+      - name: Report a tampered run
+        if: always() && steps.verify.outputs.tampered == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Elementary triage agent stopped: its environment was modified"
+          gh label create elementary-anomaly --repo "$GITHUB_REPOSITORY_NAME" --force > /dev/null
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY_NAME" --label elementary-anomaly \
+            --state open --json title | jq --arg t "$title" '[.[] | select(.title == $t)] | length')"
+          if [ "$existing" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY_NAME" --title "$title" --label elementary-anomaly \
+              --body "The agent changed its trusted scripts, the collected anomalies or the git config during a run, so nothing from that run was pushed or rendered. Run: $RUN_URL. Treat this as a possible prompt injection and review the run log before re-enabling the agent."
+          fi
