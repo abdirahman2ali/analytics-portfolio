@@ -1,0 +1,60 @@
+version: 2
+
+# Elementary anomaly tests. Severity is warn while baselines build (about 14 days
+# of runs); tighten to error once the signal is trusted.
+models:
+  - name: fct_financial_metrics
+    description: "Per company, per period financial metrics. Grain: ticker + period_of_report + filing_type."
+    data_tests:
+      - elementary.volume_anomalies:
+          config:
+            severity: warn
+    columns:
+      - name: gics_sector
+        data_tests:
+          - elementary.column_anomalies:
+              column_anomalies: [null_percent]
+              config:
+                severity: warn
+      - name: gross_margin
+        data_tests:
+          - elementary.column_anomalies:
+              column_anomalies: [null_percent]
+              config:
+                severity: warn
+      - name: ebitda_margin
+        data_tests:
+          - elementary.column_anomalies:
+              column_anomalies: [null_percent]
+              config:
+                severity: warn
+      - name: fcf_margin
+        data_tests:
+          - elementary.column_anomalies:
+              column_anomalies: [null_percent]
+              config:
+                severity: warn
+
+  - name: fct_company_scores
+    description: "Composite score, grade and peer rank per company and period."
+    data_tests:
+      - elementary.volume_anomalies:
+          config:
+            severity: warn
+      - elementary.dimension_anomalies:
+          dimensions: [grade]
+          config:
+            severity: warn
+    columns:
+      - name: composite_score
+        data_tests:
+          - elementary.column_anomalies:
+              column_anomalies: [null_percent]
+              config:
+                severity: warn
+      - name: grade
+        data_tests:
+          - elementary.column_anomalies:
+              column_anomalies: [null_percent]
+              config:
+                severity: warn

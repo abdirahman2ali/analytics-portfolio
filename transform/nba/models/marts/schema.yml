@@ -6,7 +6,11 @@ models:
       Analytics-ready fact table containing comprehensive NBA player statistics by season.
       Includes season totals, per-game averages, advanced metrics, and categorical classifications.
       This model is optimized for dashboards, BI tools, and analytics use cases.
-    
+    data_tests:
+      - elementary.volume_anomalies:
+          config:
+            severity: warn
+
     columns:
       # Identifiers
       - name: player_season_id

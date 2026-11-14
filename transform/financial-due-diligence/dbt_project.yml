@@ -31,6 +31,9 @@ models:
       +incremental_strategy: merge
       +schema: "financial_due_diligence_gold"
 
+  elementary:
+    +schema: "financial_due_diligence_elementary"
+
 seeds:
   financial_due_diligence:
     +schema: "financial_due_diligence_bronze"
