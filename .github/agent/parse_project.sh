@@ -4,10 +4,12 @@
 # Usage: parse_project.sh <financial-due-diligence|nba|toronto-parking> [deps]
 #   deps  install the project's dbt packages instead of parsing (the workflow does this once
 #         before the agent starts, so the agent itself never needs network access)
+# DBT_BIN is the absolute path to dbt. The workflow never adds that folder to PATH.
 set -euo pipefail
 
 project="$1"
 mode="${2:-parse}"
+dbt_bin="${DBT_BIN:-dbt}"
 case "$project" in
   financial-due-diligence | nba | toronto-parking) ;;
   *) echo "unknown project: $project" >&2; exit 2 ;;
@@ -19,12 +21,12 @@ export DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/none DATABRICKS_TOKEN=none
 export DATABRICKS_CATALOG=abdirahman_portfolio DBT_BRANCH_SLUG=triage_agent
 
 if [ "$mode" = "deps" ]; then
-  dbt deps
+  "$dbt_bin" deps
   exit 0
 fi
 
 if [ "$project" = "financial-due-diligence" ]; then
-  dbt parse --no-partial-parse --target dev
+  "$dbt_bin" parse --no-partial-parse --target dev
 else
-  dbt parse --no-partial-parse
+  "$dbt_bin" parse --no-partial-parse
 fi
