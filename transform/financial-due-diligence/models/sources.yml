@@ -13,6 +13,15 @@ sources:
     tables:
       - name: edgar_raw_facts
         description: "One row per (ticker, CIK, concept, period_of_report, filing_type). All financial XBRL concepts from 10-K and 10-Q filings."
+        data_tests:
+          - elementary.freshness_anomalies:
+              timestamp_column: ingested_at
+              config:
+                severity: warn
+          - elementary.volume_anomalies:
+              timestamp_column: ingested_at
+              config:
+                severity: warn
         columns:
           - name: ticker
             description: "Equity ticker symbol."

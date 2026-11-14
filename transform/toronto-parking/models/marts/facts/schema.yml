@@ -7,6 +7,14 @@ models:
       Grain: tag_number_masked + infraction_date.
       Incremental — rebuilt from max(infraction_date) on each run to handle late arrivals.
       Full refresh: dbt run --full-refresh to rebuild from scratch.
+    data_tests:
+      - elementary.volume_anomalies:
+          config:
+            severity: warn
+      - elementary.all_columns_anomalies:
+          column_anomalies: [null_percent]
+          config:
+            severity: warn
     columns:
       - name: ticket_id
         description: "Surrogate primary key (MD5 of tag_number_masked + infraction_date)."

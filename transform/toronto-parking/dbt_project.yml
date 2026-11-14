@@ -33,6 +33,9 @@ models:
         +materialized: table
         +schema: toronto_parking_dbt_marts
 
+  elementary:
+    +schema: toronto_parking_dbt_elementary
+
 seeds:
   toronto_parking_dbt:
     +schema: seeds

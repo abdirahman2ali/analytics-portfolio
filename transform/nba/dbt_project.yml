@@ -27,6 +27,9 @@ models:
       +materialized: table
       +schema: nba_dbt
 
+  elementary:
+    +schema: nba_dbt_elementary
+
 seeds:
   nba_dbt:
     +schema: seeds

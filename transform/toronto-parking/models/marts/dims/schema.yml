@@ -38,6 +38,14 @@ models:
     description: >
       Dimension for parking infraction locations. One row per unique location1 + location2 combination.
       Grain: location1 + location2.
+    data_tests:
+      - elementary.volume_anomalies:
+          config:
+            severity: warn
+      - elementary.all_columns_anomalies:
+          column_anomalies: [null_percent]
+          config:
+            severity: warn
     columns:
       - name: location_key
         description: "Surrogate primary key."

@@ -11,7 +11,9 @@
         {{ target.schema }}
     {%- else -%}
         {%- set path = node.original_file_path -%}
-        {%- if 'seeds' in path -%}
+        {%- if node.package_name == 'elementary' -%}
+            {{ custom_schema_name | trim }}
+        {%- elif 'seeds' in path -%}
             financial_due_diligence_bronze
         {%- elif 'models/bronze' in path -%}
             financial_due_diligence_bronze
