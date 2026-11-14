@@ -1,0 +1,200 @@
+name: Elementary triage agent
+
+# Once a day, read the anomalies Elementary recorded in Databricks, ask an AI agent to work out
+# the cause, open an issue per anomaly, and open a PR when the cause is a code or test change.
+# A human reviews and merges the PR. Nothing here merges automatically.
+#
+# Safety design (same shape as the issue-radar repair agent):
+# - Off unless the repo variable AGENT_ENABLED is "true" (the kill switch).
+# - The agent has no warehouse credentials and no GitHub write token. It commits locally and
+#   this workflow pushes, after a guard (run from a copy taken before the agent starts) checks
+#   which files changed.
+# - Warehouse access is a read-only token used only by the collect step.
+# - Every anomaly gets an issue. An open issue stops that anomaly being triaged again.
+# - No new PR while a triage PR is open, and at most 2 triage PRs per 7 days.
+on:
+  schedule:
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "Look back this many hours for anomalies"
+        default: "30"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elementary-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    name: Triage Elementary anomalies
+    if: ${{ vars.AGENT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      HOURS: ${{ inputs.hours || '30' }}
+      GITHUB_REPOSITORY_NAME: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+
+      - name: Stage trusted scripts and run their tests
+        run: |
+          mkdir -p /tmp/agent/trusted
+          cp .github/agent/*.py .github/agent/*.sh /tmp/agent/trusted/
+          python3 -m unittest discover -s .github/agent/tests
+
+      - name: Create a scoped GitHub App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+
+      - name: Loop breaker
+        id: gate
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY_NAME" --label elementary-anomaly \
+            --state open --limit 200 --json body --jq '.[].body' \
+            | grep -o 'elementary-test:[^ ]*' | cut -d: -f2- > /tmp/agent/open_keys.txt || true
+          echo "Anomalies with an open issue: $(wc -l < /tmp/agent/open_keys.txt)"
+
+          since="$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          prs="$(gh pr list --repo "$GITHUB_REPOSITORY_NAME" --state all --limit 100 \
+            --json headRefName,createdAt,state)"
+          open="$(jq '[.[] | select(.headRefName | startswith("triage/elementary-")) | select(.state == "OPEN")] | length' <<<"$prs")"
+          recent="$(jq --arg s "$since" '[.[] | select(.headRefName | startswith("triage/elementary-")) | select(.createdAt >= $s)] | length' <<<"$prs")"
+          echo "open=$open recent=$recent"
+          if [ "$open" -gt 0 ] || [ "$recent" -ge 2 ]; then
+            echo "allow_pr=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "allow_pr=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect anomalies (read-only warehouse access)
+        id: collect
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TRIAGE_TOKEN }}
+          DATABRICKS_WAREHOUSE_ID: ${{ vars.DATABRICKS_WAREHOUSE_ID }}
+          ALLOW_PR: ${{ steps.gate.outputs.allow_pr }}
+        run: |
+          python3 /tmp/agent/trusted/collect_anomalies.py --out /tmp/agent \
+            --hours "$HOURS" --skip-keys /tmp/agent/open_keys.txt
+          if [ "$ALLOW_PR" != "true" ]; then
+            printf '\nCommits are disabled this run. Classify only: do not edit files or commit.\n' \
+              >> /tmp/agent/context.md
+          fi
+
+      - name: Install dbt and the projects' packages
+        if: steps.collect.outputs.has_findings == 'true'
+        run: |
+          uv venv /tmp/dbtenv
+          uv pip install --python /tmp/dbtenv/bin/python dbt-databricks
+          echo "/tmp/dbtenv/bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/dbtenv/bin:$PATH"
+          for p in financial-due-diligence nba toronto-parking; do
+            bash /tmp/agent/trusted/parse_project.sh "$p" deps
+          done
+
+      - name: Prepare branch
+        if: steps.collect.outputs.has_findings == 'true'
+        id: branch
+        run: |
+          git config user.name "elementary-triage-agent"
+          git config user.email "triage-agent@users.noreply.github.com"
+          name="triage/elementary-$GITHUB_RUN_ID"
+          git switch -c "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Run the triage agent
+        if: steps.collect.outputs.has_findings == 'true'
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Read only token. The agent cannot push, open PRs or touch issues.
+          github_token: ${{ github.token }}
+          prompt: >-
+            Follow the instructions in .github/agent/triage-prompt.md. The anomalies are in
+            /tmp/agent/context.md and /tmp/agent/anomalies.json.
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(bash /tmp/agent/trusted/parse_project.sh:*),Bash(git add:*),Bash(git commit:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
+            --disallowedTools "WebFetch,WebSearch"
+
+      - name: Guard, check what the agent changed
+        if: steps.collect.outputs.has_findings == 'true' && steps.gate.outputs.allow_pr == 'true'
+        id: guard
+        env:
+          BASE: ${{ steps.branch.outputs.base }}
+        run: |
+          if python3 /tmp/agent/trusted/check_changes.py "$BASE"; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push and open a PR for review
+        if: steps.guard.outputs.ok == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          B64="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$B64"
+          git -c "http.extraheader=AUTHORIZATION: basic $B64" push origin "$BRANCH"
+          {
+            echo "Proposed by the Elementary triage agent for anomalies flagged in Databricks."
+            echo "Each anomaly has its own issue with the agent's reasoning."
+            echo
+            git log -1 --format=%b
+            echo
+            echo "Review before merging. Nothing merges automatically."
+            echo
+            echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+          } > /tmp/agent/pr-body.md
+          url="$(gh pr create --repo "$GITHUB_REPOSITORY_NAME" --base main --head "$BRANCH" \
+            --title "Elementary triage: $(git log -1 --format=%s)" --body-file /tmp/agent/pr-body.md \
+            --label automated)"
+          echo "Opened $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue per anomaly
+        if: steps.collect.outputs.has_findings == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          python3 /tmp/agent/trusted/render_issues.py \
+            --anomalies /tmp/agent/anomalies.json --triage /tmp/agent/triage.json \
+            --out-dir /tmp/agent/issues --pr-url "$PR_URL"
+          for label in elementary-anomaly triage-code_bug triage-upstream_data triage-noisy_test triage-unknown; do
+            gh label create "$label" --repo "$GITHUB_REPOSITORY_NAME" --force > /dev/null
+          done
+          jq -c '.[]' /tmp/agent/issues/manifest.json | while read -r item; do
+            title="$(jq -r '.title' <<<"$item")"
+            file="$(jq -r '.file' <<<"$item")"
+            labels="$(jq -r '.labels | join(",")' <<<"$item")"
+            gh issue create --repo "$GITHUB_REPOSITORY_NAME" --title "$title" \
+              --body-file "$file" --label "$labels"
+          done
